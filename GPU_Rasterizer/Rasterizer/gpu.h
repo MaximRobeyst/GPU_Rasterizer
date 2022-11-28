@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include "const.h"
+#include <glm.hpp>
 
 uint32_t* gpuAlloc(void);
 void gpuFree(void* gpu_mem);

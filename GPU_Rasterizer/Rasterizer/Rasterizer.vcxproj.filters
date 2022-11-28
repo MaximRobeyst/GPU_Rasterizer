@@ -1,0 +1,35 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CudaCompile Include="gpu.cu" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="Triangle.cu" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="const.h" />
+    <ClInclude Include="gpu.h" />
+    <ClInclude Include="Triangle.h" />
+    <ClInclude Include="helper_math.h">
+      <Filter>Math</Filter>
+    </ClInclude>
+    <ClInclude Include="nvMath.h">
+      <Filter>Math</Filter>
+    </ClInclude>
+    <ClInclude Include="nvMatrix.h">
+      <Filter>Math</Filter>
+    </ClInclude>
+    <ClInclude Include="nvQuaternion.h">
+      <Filter>Math</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Math">
+      <UniqueIdentifier>{8011e954-5589-46ea-ab99-b865ecc3b207}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="cpp.hint" />
+  </ItemGroup>
+</Project>

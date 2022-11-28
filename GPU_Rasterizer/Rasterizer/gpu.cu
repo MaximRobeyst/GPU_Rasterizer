@@ -3,6 +3,12 @@
 #include <cuda_runtime_api.h>
 #include <device_launch_parameters.h>
 
+#include <vector>
+#include <math.h>
+
+#include "Triangle.h"
+#include "helper_math.h"
+
 uint32_t* gpuAlloc(void) {
 	uint32_t* gpu_mem;
 
@@ -22,12 +28,25 @@ int gpuBlit(void* src, void* dst) {
 	return 0;
 }
 
-// ----- 
-
 __host__
 __device__
 uint32_t getPixColor(int x, int y) {
-	return 0xFFFF0000;
+	Triangle g_Triangle{ float3{0.0f, 0.5f, -1.0f}, float3{-0.5, -0.5f, -1.0f}, float3{0.5f, -0.5f, -1.0f} };
+
+	float4 color{0.0f, 0.0f, 0.0f, 0.0f};
+
+	float3 pixel{ static_cast<float>(x), static_cast<float>(y), 0.0f };
+
+	// Triangle
+	float3 a = make_float3(g_Triangle.m_ViewSpaceVertices[1]) - make_float3(g_Triangle.m_ViewSpaceVertices[0]);
+	float3 b = make_float3(g_Triangle.m_ViewSpaceVertices[2]) - make_float3(g_Triangle.m_ViewSpaceVertices[0]);
+
+	auto normal = cross(a, b);
+
+	if (dot(normal, pixel) == 0)
+		color = float4{ 1.0f, 1.0f, 1.0f, 1.0f };
+
+	return (uint8_t)(color.x * 255) | ((uint8_t)(color.y * 255) << 8) | ((uint8_t)(color.z * 255) << 16) | ((uint8_t)(color.w * 255) << 24);
 }
 
 __global__ void my_kernel(uint32_t* buf) {
