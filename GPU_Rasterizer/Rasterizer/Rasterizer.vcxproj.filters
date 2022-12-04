@@ -6,6 +6,7 @@
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Triangle.cu" />
+    <ClCompile Include="Camera.cu" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="const.h" />
@@ -23,6 +24,7 @@
     <ClInclude Include="nvQuaternion.h">
       <Filter>Math</Filter>
     </ClInclude>
+    <ClInclude Include="Camera.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Math">
