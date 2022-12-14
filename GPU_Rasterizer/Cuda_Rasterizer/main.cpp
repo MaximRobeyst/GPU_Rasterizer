@@ -9,11 +9,20 @@
 #include "const.h"
 #include "gpu.h"
 
-void render(SDL_Surface* screen, void* cuda_pixels) {
-	gpuRender((uint32_t*)cuda_pixels);
-	if ( gpuBlit(cuda_pixels, screen->pixels) != 0 ) {
+#include <vld.h>
+
+#include "Camera.h"
+#include <cuda_runtime_api.h>
+
+void render(SDL_Surface* screen, void* cuda_pixels, void* depth_pixels, Camera* pCamera) 
+{
+	gpuRender((uint32_t*)cuda_pixels, (uint32_t*)depth_pixels, pCamera);
+	if ( gpuBlit(cuda_pixels, screen->pixels) != 0 ) 
+	{
+		cudaError_t err{ cudaGetLastError() };
+
 		// todo: get cuda error
-		std::cerr << "cuda error" << std::endl;
+		std::cerr << cudaGetErrorString(err) << std::endl;
 	};
 }
 
@@ -58,25 +67,35 @@ int main(int argc, char* args[]) {
         exit(1);
 	}
 
-	uint32_t* gpu_mem = gpuAlloc();	
-	if ( gpu_mem == NULL ) {
+	uint32_t* gpu_Screen = gpuAlloc();	
+	if ( gpu_Screen == NULL ) {
 		std::cerr << "failed to alloc gpu memory" << std::endl;
 	}
+
+	uint32_t* gpu_Depth = gpuAlloc();
+	if (gpu_Depth == NULL) {
+		std::cerr << "failed to alloc gpu memory" << std::endl;
+	}
+
+	Camera* pCamera = new Camera{ glm::vec3{ 0,0,10.0f }, glm::vec3{ 0,0,1.0f }, 60.0f, SCREEN_WIDTH / SCREEN_HEIGHT };
 
     while (1) {
 
         SDL_Event e;
-        if (SDL_PollEvent(&e)) {
-            if (e.type == SDL_QUIT) {
+        if (SDL_PollEvent(&e)) 
+		{
+            if (e.type == SDL_QUIT) 
+			{
                 break;
             }
         }
 
 		uint32_t now = SDL_GetTicks();
-		if (next_time_step <= now) {
+		if (next_time_step <= now) 
+		{
 
 			SDL_LockSurface(default_screen);
-			render(default_screen, gpu_mem);
+			render(default_screen, gpu_Screen, gpu_Depth, pCamera);
 			SDL_UnlockSurface(default_screen);
 
 			SDL_UpdateTexture(sdlTexture, NULL, default_screen->pixels, default_screen->pitch);
@@ -95,8 +114,10 @@ int main(int argc, char* args[]) {
 	  std::cerr << "could not create window: " << SDL_GetError() << std::endl;
     return 1;
   }
+	
+  delete pCamera;
 
-  	gpuFree(gpu_mem);
+  	gpuFree(gpu_Screen);
 
     SDL_DestroyTexture(sdlTexture);
     SDL_DestroyRenderer(sdlRenderer);

@@ -1,15 +1,21 @@
 #pragma once
 #include <glm\glm.hpp>
+#include <cuda_runtime.h>
 
 class Camera final
 {
 public:
-	Camera(const glm::vec3& position, const glm::vec3& forward, float FOV, float aspectRatio, float far = 100.0f, float near = 0.1f);
+	__device__ Camera(const glm::vec3& position, const glm::vec3& forward, float FOV, float aspectRatio, float far = 100.0f, float near = 0.1f);
+
+	__device__ glm::mat4 GetWorldMatrix();
+	__device__ glm::mat4 GetProjectionMatrix();
 
 private:
-	void UpdateMatrix();
-	glm::mat3 MakeRotationY(float f);
-	glm::mat3 MakeRotation(float f, glm::vec3 axis);
+	__device__ void UpdateMatrix();
+	__device__ glm::mat3 MakeRotationY(float f);
+	__device__ glm::mat3 MakeRotation(float f, glm::vec3 axis);
+
+	static Camera* m_MainCamera;
 
 	const float m_AspectRatio;
 	const float m_Far;

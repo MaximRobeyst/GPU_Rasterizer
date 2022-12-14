@@ -1,6 +1,11 @@
 #include "Camera.h"
 #include "const.h"
+#include "gpu.h"
+#include <glm/gtc/type_ptr.hpp>
 
+Camera* Camera::m_MainCamera;
+
+__device__
 Camera::Camera(const glm::vec3& position, const glm::vec3& forward, float FOV, float aspectRatio, float far, float near)
 	: m_Position{position}
 	, m_Forward{forward}
@@ -18,6 +23,20 @@ Camera::Camera(const glm::vec3& position, const glm::vec3& forward, float FOV, f
 	};
 }
 
+__device__
+glm::mat4 Camera::GetWorldMatrix()
+{
+	return m_WorldToView;
+}
+
+__device__
+glm::mat4 Camera::GetProjectionMatrix()
+{
+
+	return m_ProjectionMatrix;
+}
+
+__device__
 void Camera::UpdateMatrix()
 {
 	//FORWARD (zAxis) with YAW applied
@@ -55,6 +74,7 @@ void Camera::UpdateMatrix()
 	m_WorldViewProjectionMatrix = m_ProjectionMatrix * m_ViewToWorld;
 }
 
+__device__
 glm::mat3 Camera::MakeRotationY(float t)
 {
 	float c = cosf(t);
@@ -66,6 +86,7 @@ glm::mat3 Camera::MakeRotationY(float t)
 		-s, 0, c);
 }
 
+__device__
 glm::mat3 Camera::MakeRotation(float t, glm::vec3 axis)
 {
 	float c = cosf(t);
