@@ -5,17 +5,16 @@
 class Camera final
 {
 public:
-	__device__ Camera(const glm::vec3& position, const glm::vec3& forward, float FOV, float aspectRatio, float far = 100.0f, float near = 0.1f);
+	__host__ __device__ Camera(const glm::vec3& position, const glm::vec3& forward, float FOV, float aspectRatio, float far = 100.0f, float near = 0.1f);
+	__host__ __device__ ~Camera();
 
-	__device__ glm::mat4 GetWorldMatrix();
-	__device__ glm::mat4 GetProjectionMatrix();
+	__host__ __device__ glm::mat4 GetWorldMatrix();
+	__host__ __device__ glm::mat4 GetProjectionMatrix();
 
 private:
-	__device__ void UpdateMatrix();
-	__device__ glm::mat3 MakeRotationY(float f);
-	__device__ glm::mat3 MakeRotation(float f, glm::vec3 axis);
-
-	static Camera* m_MainCamera;
+	__host__ __device__ void UpdateMatrix();
+	__host__ __device__ glm::mat3 MakeRotationY(float f);
+	__host__ __device__ glm::mat3 MakeRotation(float f, glm::vec3 axis);
 
 	const float m_AspectRatio;
 	const float m_Far;

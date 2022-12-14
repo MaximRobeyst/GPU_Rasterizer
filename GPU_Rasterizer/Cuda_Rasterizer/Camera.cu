@@ -3,8 +3,7 @@
 #include "gpu.h"
 #include <glm/gtc/type_ptr.hpp>
 
-Camera* Camera::m_MainCamera;
-
+__host__
 __device__
 Camera::Camera(const glm::vec3& position, const glm::vec3& forward, float FOV, float aspectRatio, float far, float near)
 	: m_Position{position}
@@ -23,12 +22,18 @@ Camera::Camera(const glm::vec3& position, const glm::vec3& forward, float FOV, f
 	};
 }
 
+Camera::~Camera()
+{
+}
+
+__host__
 __device__
 glm::mat4 Camera::GetWorldMatrix()
 {
 	return m_WorldToView;
 }
 
+__host__
 __device__
 glm::mat4 Camera::GetProjectionMatrix()
 {
@@ -36,6 +41,7 @@ glm::mat4 Camera::GetProjectionMatrix()
 	return m_ProjectionMatrix;
 }
 
+__host__
 __device__
 void Camera::UpdateMatrix()
 {
@@ -74,6 +80,7 @@ void Camera::UpdateMatrix()
 	m_WorldViewProjectionMatrix = m_ProjectionMatrix * m_ViewToWorld;
 }
 
+__host__
 __device__
 glm::mat3 Camera::MakeRotationY(float t)
 {
@@ -86,6 +93,7 @@ glm::mat3 Camera::MakeRotationY(float t)
 		-s, 0, c);
 }
 
+__host__
 __device__
 glm::mat3 Camera::MakeRotation(float t, glm::vec3 axis)
 {

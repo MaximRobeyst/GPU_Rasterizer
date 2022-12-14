@@ -14,9 +14,9 @@
 #include "Camera.h"
 #include <cuda_runtime_api.h>
 
-void render(SDL_Surface* screen, void* cuda_pixels, void* depth_pixels, Camera* pCamera) 
+void render(SDL_Surface* screen, void* cuda_pixels, void* depth_pixels) 
 {
-	gpuRender((uint32_t*)cuda_pixels, (uint32_t*)depth_pixels, pCamera);
+	gpuRender((uint32_t*)cuda_pixels, (uint32_t*)depth_pixels);
 	if ( gpuBlit(cuda_pixels, screen->pixels) != 0 ) 
 	{
 		cudaError_t err{ cudaGetLastError() };
@@ -95,7 +95,7 @@ int main(int argc, char* args[]) {
 		{
 
 			SDL_LockSurface(default_screen);
-			render(default_screen, gpu_Screen, gpu_Depth, pCamera);
+			render(default_screen, gpu_Screen, gpu_Depth);
 			SDL_UnlockSurface(default_screen);
 
 			SDL_UpdateTexture(sdlTexture, NULL, default_screen->pixels, default_screen->pitch);

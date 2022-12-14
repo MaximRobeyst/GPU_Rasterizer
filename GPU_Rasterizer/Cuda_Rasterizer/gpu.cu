@@ -3,11 +3,14 @@
 #include <cuda_runtime_api.h>
 #include <device_launch_parameters.h>
 
+#include "Camera.h"
 
-__global__ Camera g_Camera{ glm::vec3{0,0,10.0f}, glm::vec3{0,0,1.0f}, 60.0f, SCREEN_WIDTH / SCREEN_HEIGHT };
+
+__device__ Camera* g_pCamera;
 
 void gpuInit()
 {
+	g_pCamera = new Camera{ glm::vec3{0,0,10.0f}, glm::vec3{0,0,1.0f}, 60.0f, SCREEN_WIDTH / SCREEN_HEIGHT };
 }
 
 
@@ -22,7 +25,7 @@ uint32_t * gpuAlloc(void) {
 
 void gpuFree(void* gpu_mem) {
 	cudaFree(gpu_mem);
-
+	delete g_pCamera;
 }
 
 int gpuBlit(void* src, void* dst){
@@ -80,7 +83,7 @@ uint32_t getPixColor(int x, int y) {
 		glm::vec3{1.f, 0.f, 0.0f}
 	};
 
-	TransformVertices(triangleVertices, screenSpaceVertices, 3, g_Camera.GetWorldMatrix(), g_Camera.GetProjectionMatrix());
+	TransformVertices(triangleVertices, screenSpaceVertices, 3, g_pCamera->GetWorldMatrix(), g_pCamera->GetProjectionMatrix());
 
 
 	for (uint32_t i = 0; i < 3; ++i)
@@ -110,5 +113,5 @@ __global__ void my_kernel(uint32_t* buf, uint32_t* depthBuffer)
 void gpuRender(uint32_t* buf, uint32_t* depthBuf) {
 	const dim3 blocksPerGrid(H_TILES, V_TILES);
 	const dim3 threadsPerBlock(TILE_WIDTH, TILE_HEIGHT);
-	my_kernel<<<blocksPerGrid, threadsPerBlock>>>(buf, depthBuf, pCamera);
+	my_kernel<<<blocksPerGrid, threadsPerBlock>>>(buf, depthBuf);
 }
