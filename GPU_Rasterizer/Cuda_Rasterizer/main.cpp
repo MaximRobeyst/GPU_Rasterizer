@@ -13,6 +13,7 @@
 
 #include "Camera.h"
 #include <cuda_runtime_api.h>
+#include <glm/gtc/type_ptr.hpp>
 
 void render(SDL_Surface* screen, void* cuda_pixels, void* depth_pixels) 
 {
@@ -30,7 +31,6 @@ int main(int argc, char* args[]) {
 
 	uint32_t time_step = 1000. / 60. ;
 	uint32_t next_time_step = SDL_GetTicks();
-
 
 	if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
 		std::cerr << "could not initialize sdl2: " << SDL_GetError() << std::endl;
@@ -77,7 +77,7 @@ int main(int argc, char* args[]) {
 		std::cerr << "failed to alloc gpu memory" << std::endl;
 	}
 
-	Camera* pCamera = new Camera{ glm::vec3{ 0,0,10.0f }, glm::vec3{ 0,0,1.0f }, 60.0f, SCREEN_WIDTH / SCREEN_HEIGHT };
+	Camera* pCamera = new Camera{ glm::vec3{ 0,0,10.0f }, glm::vec3{ 0,0,1.0f }, 60.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
 
     while (1) {
 
@@ -88,11 +88,28 @@ int main(int argc, char* args[]) {
 			{
                 break;
             }
+			if (e.type == SDL_KEYDOWN)
+			{
+				glm::vec2 newPosition{};
+				if (e.key.keysym.sym == SDLK_w)
+					newPosition.y = 1;
+				if (e.key.keysym.sym == SDLK_s)
+					newPosition.y = -1;
+				if (e.key.keysym.sym == SDLK_d)
+					newPosition.x = 1;
+				if (e.key.keysym.sym == SDLK_a)
+					newPosition.x = -1;
+
+
+				pCamera->UpdatePosition(newPosition);
+			}
+
         }
 
 		uint32_t now = SDL_GetTicks();
 		if (next_time_step <= now) 
 		{
+			gpuInit(pCamera);
 
 			SDL_LockSurface(default_screen);
 			render(default_screen, gpu_Screen, gpu_Depth);
@@ -107,7 +124,6 @@ int main(int argc, char* args[]) {
 		} else {
 			SDL_Delay(next_time_step - now);
 		}
-
     }
 
   if (window == NULL) {

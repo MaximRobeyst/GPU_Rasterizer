@@ -1,7 +1,14 @@
 #include "Camera.h"
 #include "const.h"
-#include "gpu.h"
 #include <glm/gtc/type_ptr.hpp>
+
+Camera::Camera()
+	: m_AspectRatio{SCREEN_WIDTH / SCREEN_HEIGHT}
+	, m_Far{1000.0f}
+	, m_Near{0.1f}
+	, m_FOV{60 * static_cast<float>(E_TO_RADIANS) }
+{
+}
 
 __host__
 __device__
@@ -15,10 +22,10 @@ Camera::Camera(const glm::vec3& position, const glm::vec3& forward, float FOV, f
 {
 
 	m_ProjectionMatrix = glm::mat4{
-		glm::vec4{1 / (aspectRatio * FOV), 0,0,0},
-		glm::vec4{0,1 / FOV, 0, 0},
-		glm::vec4{0,0, -far / (far - near), -1},
-		glm::vec4{0,0,-(far * near) / (far - near), 0}
+		glm::vec4{ 1 / (aspectRatio * m_FOV),0,0, 0 },
+		glm::vec4{ 0,1 / m_FOV,0, 0 },
+		glm::vec4{ 0,0, -far / (far - near), -1},
+		glm::vec4{ 0, 0,-(far * near) / (far - near),0 }
 	};
 }
 
@@ -39,6 +46,16 @@ glm::mat4 Camera::GetProjectionMatrix()
 {
 
 	return m_ProjectionMatrix;
+}
+
+__host__
+__device__
+void Camera::UpdatePosition(const glm::vec2& difference)
+{
+	m_Position.x += difference.x;
+	m_Position.z += difference.y;
+
+	UpdateMatrix();
 }
 
 __host__

@@ -6,11 +6,13 @@
 #include "Camera.h"
 
 
-__device__ Camera* g_pCamera;
+__device__ float g_WorldMatri[4][4];
+__device__ float g_ProjectionMatri[4][4];
 
-void gpuInit()
+void gpuInit(Camera* pCamera)
 {
-	g_pCamera = new Camera{ glm::vec3{0,0,10.0f}, glm::vec3{0,0,1.0f}, 60.0f, SCREEN_WIDTH / SCREEN_HEIGHT };
+	cudaMemcpy(g_WorldMatri, glm::value_ptr(pCamera->GetWorldMatrix()), sizeof(glm::mat4), cudaMemcpyDefault);
+	cudaMemcpy(g_ProjectionMatri, glm::value_ptr(pCamera->GetProjectionMatrix()), sizeof(glm::mat4), cudaMemcpyDefault);
 }
 
 
@@ -25,7 +27,6 @@ uint32_t * gpuAlloc(void) {
 
 void gpuFree(void* gpu_mem) {
 	cudaFree(gpu_mem);
-	delete g_pCamera;
 }
 
 int gpuBlit(void* src, void* dst){
@@ -45,7 +46,7 @@ inline float Cross(const glm::vec2& v1, const glm::vec2& v2)
 
 __host__
 __device__
-void TransformVertex(const glm::vec3& originalVertex, glm::vec4& transformedVertex, glm::mat4 worldToView, glm::mat4 projectionMatrix)
+void TransformVertex(const glm::vec3& originalVertex, glm::vec4& transformedVertex, const glm::mat4& worldToView, const glm::mat4& projectionMatrix)
 {
 	glm::vec4 projectedVertex = worldToView * glm::vec4(originalVertex, 1.0f);
 	projectedVertex = projectionMatrix * projectedVertex;
@@ -54,15 +55,17 @@ void TransformVertex(const glm::vec3& originalVertex, glm::vec4& transformedVert
 	projectedVertex.y /= projectedVertex.w;
 	projectedVertex.z /= projectedVertex.w;
 
-	projectedVertex.x = ((projectedVertex.x + 1) / 2) * SCREEN_WIDTH;
-	projectedVertex.y = ((1 - projectedVertex.y) / 2) * SCREEN_HEIGHT;
+	projectedVertex.x = ((projectedVertex.x + 1) / 2) * static_cast<float>(SCREEN_WIDTH);
+	projectedVertex.y = ((1 - projectedVertex.y) / 2) * static_cast<float>(SCREEN_HEIGHT);
+
+	float vector[4]{ projectedVertex.x, projectedVertex.y, projectedVertex.z, projectedVertex.w };
 
 	transformedVertex = projectedVertex;
 }
 
 __host__
 __device__
-void TransformVertices(const glm::vec3* originalVertex, glm::vec4* transformedVertex, int size, glm::mat4 worldToView, glm::mat4 projectionMatrix)
+void TransformVertices(const glm::vec3* originalVertex, glm::vec4* transformedVertex, int size, const glm::mat4& worldToView, const glm::mat4& projectionMatrix)
 {
 	for (size_t vertexIndex = 0; vertexIndex < size; ++vertexIndex)
 	{
@@ -77,13 +80,18 @@ uint32_t getPixColor(int x, int y) {
 	glm::vec2 pixel = glm::vec2{ static_cast<float>(x), static_cast<float>(y) };
 	glm::vec4 screenSpaceVertices[3];
 
-	glm::vec3 triangleVertices[3]{
+	glm::vec3 triangleVertices[3]
+	{
 		glm::vec3{0.0f, 2.0f, 0.0f},
 		glm::vec3{-1.f, 0.f, 0.f},
 		glm::vec3{1.f, 0.f, 0.0f}
 	};
 
-	TransformVertices(triangleVertices, screenSpaceVertices, 3, g_pCamera->GetWorldMatrix(), g_pCamera->GetProjectionMatrix());
+
+	glm::mat4 worldMatri = glm::make_mat4(&g_WorldMatri[0][0]);
+	glm::mat4 projectionMatri = glm::make_mat4(&g_ProjectionMatri[0][0]);
+
+	TransformVertices(triangleVertices, screenSpaceVertices, 3, worldMatri, projectionMatri);
 
 
 	for (uint32_t i = 0; i < 3; ++i)

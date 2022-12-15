@@ -5,11 +5,16 @@
 #include "const.h"
 
 #include <builtin_types.h>
+
+#include <cuda.h>
+
+#define GLM_FORCE_CUDA
 #include <glm\glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
-#include "Camera.h"
+class Camera;
 
-void gpuInit();
+void gpuInit(Camera* pCamera);
 
 uint32_t * gpuAlloc(void) ;
 void gpuFree(void* gpu_mem);

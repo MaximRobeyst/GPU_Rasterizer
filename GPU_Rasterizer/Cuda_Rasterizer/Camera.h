@@ -1,15 +1,22 @@
 #pragma once
+#include <cuda.h>
+
+#define GLM_FORCE_CUDA
 #include <glm\glm.hpp>
+
 #include <cuda_runtime.h>
 
 class Camera final
 {
 public:
+	__host__ __device__ Camera();
 	__host__ __device__ Camera(const glm::vec3& position, const glm::vec3& forward, float FOV, float aspectRatio, float far = 100.0f, float near = 0.1f);
 	__host__ __device__ ~Camera();
 
 	__host__ __device__ glm::mat4 GetWorldMatrix();
 	__host__ __device__ glm::mat4 GetProjectionMatrix();
+
+	__host__ __device__ void UpdatePosition(const glm::vec2& difference);
 
 private:
 	__host__ __device__ void UpdateMatrix();
