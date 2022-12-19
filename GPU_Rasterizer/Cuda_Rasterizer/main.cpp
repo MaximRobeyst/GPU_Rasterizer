@@ -15,6 +15,12 @@
 #include <cuda_runtime_api.h>
 #include <glm/gtc/type_ptr.hpp>
 
+#include <vector>
+#include "Triangle.h"
+
+#define GLM_FORCE_CUDA
+#include <glm\glm.hpp>
+
 void render(SDL_Surface* screen, void* cuda_pixels, void* depth_pixels) 
 {
 	gpuRender((uint32_t*)cuda_pixels, (uint32_t*)depth_pixels);
@@ -77,7 +83,22 @@ int main(int argc, char* args[]) {
 		std::cerr << "failed to alloc gpu memory" << std::endl;
 	}
 
+
+	std::vector<Vertex_In> triangleVertices
+	{
+		Vertex_In{glm::vec3{0.0f, 2.0f, 0.0f}, glm::vec3{1.0f, 0.0f, 0.0f}},
+		Vertex_In{glm::vec3{-1.f, 0.f, 0.f}, glm::vec3{1.0f, 0.0f, 0.0f}},
+		Vertex_In{glm::vec3{1.f, 0.f, 0.0f}, glm::vec3{1.0f, 0.0f, 0.0f}}
+	};
+
+	std::vector<int> indices
+	{
+		1, 2, 3
+	};
+
 	Camera* pCamera = new Camera{ glm::vec3{ 0,0,10.0f }, glm::vec3{ 0,0,1.0f }, 60.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
+
+	InitBuffers(triangleVertices, indices);
 
     while (1) {
 

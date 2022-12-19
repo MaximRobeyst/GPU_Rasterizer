@@ -32,6 +32,9 @@
     <ClInclude Include="Shader.h">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="checkCUDAError.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="ComputeShader.comp" />

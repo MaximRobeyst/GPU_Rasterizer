@@ -1,6 +1,9 @@
 #include "Camera.h"
 #include "const.h"
+
+#define GLM_FORCE_CUDA
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 Camera::Camera()
 	: m_AspectRatio{SCREEN_WIDTH / SCREEN_HEIGHT}
@@ -21,12 +24,9 @@ Camera::Camera(const glm::vec3& position, const glm::vec3& forward, float FOV, f
 	, m_Near{near}
 {
 
-	m_ProjectionMatrix = glm::mat4{
-		glm::vec4{ 1 / (aspectRatio * m_FOV),0,0, 0 },
-		glm::vec4{ 0,1 / m_FOV,0, 0 },
-		glm::vec4{ 0,0, -far / (far - near), -1},
-		glm::vec4{ 0, 0,-(far * near) / (far - near),0 }
-	};
+	m_ProjectionMatrix = glm::perspective(m_FOV, aspectRatio, near, far);
+
+	UpdateMatrix();
 }
 
 Camera::~Camera()
@@ -42,10 +42,10 @@ glm::mat4 Camera::GetWorldMatrix()
 
 __host__
 __device__
-glm::mat4 Camera::GetProjectionMatrix()
+glm::mat4 Camera::GetWorldViewProjectionMatrix()
 {
 
-	return m_ProjectionMatrix;
+	return m_WorldViewProjectionMatrix * m_WorldToView;
 }
 
 __host__
@@ -82,16 +82,9 @@ void Camera::UpdateMatrix()
 	m_Position += m_RelativeTranslation.z * zAxis;
 
 	//Construct View2World Matrix
-	m_ViewToWorld =
-	{
-		glm::vec4{xAxis, 0.0f},
-		glm::vec4{yAxis, 0.0f},
-		glm::vec4{zAxis, 0.0f},
-		glm::vec4{m_Position.x,m_Position.y,m_Position.z,1.f}
-	};
-
+	m_ViewToWorld = glm::lookAt(m_Position, zAxis, yAxis);
 	//Construct World2View Matrix || viewMatrix
-	m_WorldToView = glm::inverse(m_ViewToWorld);
+	m_WorldToView = glm::mat4(1.0f);
 
 	// WorldViewProjectionMatrix = ProjectionMatrix * ViewMatrix * WorldMatrix
 	m_WorldViewProjectionMatrix = m_ProjectionMatrix * m_ViewToWorld;
