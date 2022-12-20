@@ -10,6 +10,7 @@
 #include "checkCUDAError.h"
 
 #include <vector>
+#include <iostream>
 
 // https://github.com/bcrusco/CUDA-Rasterizer
 
@@ -44,14 +45,27 @@ void InitBuffers(const std::vector<Vertex_In>& vertices,const std::vector<int>& 
 	primitiveCount = g_VertCount / 3;
 
 	// Verte in buffer
-	cudaFree(g_pVerteInBuffer);
-	cudaMalloc(&g_pVerteInBuffer, g_VertCount * sizeof(Vertex_In));
-	cudaMemcpy(g_pVerteInBuffer, vertices.data(), g_VertCount * sizeof(Vertex_In), cudaMemcpyHostToDevice);
+	cudaError_t err = cudaFree(g_pVerteInBuffer);
+	if (err != cudaSuccess)
+		std::cout << "error with freeing memoery vertexbuffer" << std::endl;
+
+	err = cudaMalloc(&g_pVerteInBuffer, g_VertCount * sizeof(Vertex_In));
+	if (err != cudaSuccess)
+		std::cout << "error with freeing memoery vertexbuffer" << std::endl;
+	err = cudaMemcpy(g_pVerteInBuffer, vertices.data(), g_VertCount * sizeof(Vertex_In), cudaMemcpyHostToDevice);
+	if (err != cudaSuccess)
+		std::cout << "error with freeing memoery vertexbuffer" << std::endl;
 
 	// verte out buffer
-	cudaFree(g_pVerteOutBuffer);
-	cudaMalloc(&g_pVerteOutBuffer, g_VertCount * sizeof(Vertex_Out));
-	cudaMemset(g_pVerteOutBuffer, 0, g_VertCount * sizeof(Vertex_In));
+	err = cudaFree(g_pVerteOutBuffer);
+	if (err != cudaSuccess)
+		std::cout << "error with freeing memoery vertexbuffer" << std::endl;
+	err = cudaMalloc(&g_pVerteOutBuffer, g_VertCount * sizeof(Vertex_Out));
+	if (err != cudaSuccess)
+		std::cout << "error with freeing memoery vertexbuffer" << std::endl;
+	err = cudaMemset(g_pVerteOutBuffer, 0, g_VertCount * sizeof(Vertex_In));
+	if (err != cudaSuccess)
+		std::cout << "error with freeing memoery vertexbuffer" << std::endl;
 
 	// Inde buffer
 	cudaFree(g_pIndeBuffer);
@@ -115,7 +129,6 @@ void VerteShading(float far, float near, int verteCount, const Vertex_In* verteI
 		projectedVertex.w
 	};
 	verteOutBuffer[index].color = verteInBuffer[index].color;
-
 }
 
 __host__ __device__ static
@@ -246,14 +259,15 @@ void gpuRender(uint32_t* buf, uint32_t* depthBuf) {
 	VerteShading<<<vertexGridSize, vertexBlockSize>>>(g_pCamera->GetFar(), g_pCamera->GetNear(), g_VertCount, g_pVerteInBuffer, g_pVerteOutBuffer, g_pCamera->GetWorldViewProjectionMatrix());
 
 	// Primitive Assembly
-	AssemblePrimitives<<<vertexGridSize, vertexBlockSize>>>(primitiveCount, g_pVerteOutBuffer, dev_primitives, g_pIndeBuffer);
+	//AssemblePrimitives<<<vertexGridSize, vertexBlockSize>>>(primitiveCount, g_pVerteOutBuffer, dev_primitives, g_pIndeBuffer);
 
 	// Culling 
 
 
 	// Rasterization
-	rasterization<<<blockCount2d, blockSize2d>>>(SCREEN_WIDTH, SCREEN_HEIGHT, primitiveCount, dev_primitives, buf);
+	//rasterization<<<blockCount2d, blockSize2d>>>(SCREEN_WIDTH, SCREEN_HEIGHT, primitiveCount, dev_primitives, buf);
 
 
+	checkCUDAError("gpuRender");
 	//buf[pos] = getPixColor(xPix, yPix);
 }
