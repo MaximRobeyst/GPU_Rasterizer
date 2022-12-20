@@ -105,13 +105,13 @@ int gpuBlit(void* src, void* dst){
 
 __host__
 __device__
-inline float Cross(const glm::vec2& v1, const glm::vec2& v2)
+inline float Cross(const glm::vec2 v1, const glm::vec2 v2)
 {
 	return v1.x * v2.y - v1.y * v2.x;
 }
 
 __global__ 
-void VerteShading(float far, float near, int verteCount, const Vertex_In* verteInBuffer, Vertex_Out* verteOutBuffer, const glm::mat4& worldViewProjectionMatri)
+void VerteShading(float far, float near, int verteCount, const Vertex_In* verteInBuffer, Vertex_Out* verteOutBuffer, const glm::mat4 worldViewProjectionMatri)
 {
 	int index = ((blockIdx.x * blockDim.x) + threadIdx.x) + (((blockIdx.y * blockDim.y) + threadIdx.y) * static_cast<int>(SCREEN_WIDTH));
 
@@ -123,26 +123,12 @@ void VerteShading(float far, float near, int verteCount, const Vertex_In* verteI
 	verteOutBuffer[index].screenPosition =
 		glm::vec4
 	{
-		static_cast<float>(SCREEN_WIDTH) * 0.5f * (normDeviceCoordinates.x + 1.0f),
-		static_cast<float>(SCREEN_HEIGHT) * 0.5f * (normDeviceCoordinates.y + 1.0f),
-		0.5f * ((far - near) * normDeviceCoordinates.z + (far + near)),
+		((projectedVertex.x + 1) / 2) * static_cast<float>(SCREEN_WIDTH),
+		((1 - projectedVertex.y) / 2) * static_cast<float>(SCREEN_HEIGHT),
+		normDeviceCoordinates.z,
 		projectedVertex.w
 	};
 	verteOutBuffer[index].color = verteInBuffer[index].color;
-}
-
-__host__ __device__ static
-BoundingBox getAABBForTriangle(const Triangle tri) {
-	BoundingBox boundingBox;
-	boundingBox.min = glm::vec3(
-		glm::min(glm::min(tri.v[0].screenPosition.x, tri.v[1].screenPosition.x), tri.v[2].screenPosition.x),
-		glm::min(glm::min(tri.v[0].screenPosition.y, tri.v[1].screenPosition.y), tri.v[2].screenPosition.y),
-		glm::min(glm::min(tri.v[0].screenPosition.z, tri.v[1].screenPosition.z), tri.v[2].screenPosition.z));
-	boundingBox.max = glm::vec3(
-		glm::max(glm::max(tri.v[0].screenPosition.x, tri.v[1].screenPosition.x), tri.v[2].screenPosition.x),
-		glm::max(glm::max(tri.v[0].screenPosition.y, tri.v[1].screenPosition.y), tri.v[2].screenPosition.y),
-		glm::max(glm::max(tri.v[0].screenPosition.z, tri.v[1].screenPosition.z), tri.v[2].screenPosition.z));
-	return boundingBox;
 }
 
 __global__
@@ -154,96 +140,62 @@ void AssemblePrimitives(int primitiveCount, const Vertex_Out* vertexBufferOut, T
 			primitives[index].v[i] = vertexBufferOut[bufIdx[3 * index + i]];
 		}
 
-		primitives[index].boundingBox = getAABBForTriangle(primitives[index]);
+		//primitives[index].boundingBox = getAABBForTriangle(primitives[index]);
 		primitives[index].visible = true;
-	}
-}
-
-__host__ __device__ static
-float calculateSignedArea(const Triangle tri) {
-	return 0.5 * ((tri.v[2].screenPosition.x - tri.v[0].screenPosition.x) * (tri.v[1].screenPosition.y - tri.v[0].screenPosition.y) - (tri.v[1].screenPosition.x - tri.v[0].screenPosition.x) * (tri.v[2].screenPosition.y - tri.v[0].screenPosition.y));
-}
-
-
-__host__ __device__ static
-float calculateBarycentricCoordinateValue(glm::vec2 a, glm::vec2 b, glm::vec2 c, const Triangle tri) {
-	Triangle baryTri;
-	baryTri.v[0].screenPosition = glm::vec4(a, 0, 0);
-	baryTri.v[1].screenPosition = glm::vec4(b, 0, 0);
-	baryTri.v[2].screenPosition = glm::vec4(c, 0, 0);
-	return calculateSignedArea(baryTri) / calculateSignedArea(tri);
-}
-
-__host__ __device__ static
-glm::vec3 calculateBarycentricCoordinate(const Triangle tri, glm::vec2 point) {
-	float beta = calculateBarycentricCoordinateValue(glm::vec2(tri.v[0].screenPosition.x, tri.v[0].screenPosition.y), point, glm::vec2(tri.v[2].screenPosition.x, tri.v[2].screenPosition.y), tri);
-	float gamma = calculateBarycentricCoordinateValue(glm::vec2(tri.v[0].screenPosition.x, tri.v[0].screenPosition.y), glm::vec2(tri.v[1].screenPosition.x, tri.v[1].screenPosition.y), point, tri);
-	float alpha = 1.0 - beta - gamma;
-	return glm::vec3(alpha, beta, gamma);
-}
-
-// CHECKITOUT
-/**
- * Check if a barycentric coordinate is within the boundaries of a triangle.
- */
-__host__ __device__ static
-bool isBarycentricCoordInBounds(const glm::vec3 barycentricCoord) {
-	return barycentricCoord.x >= 0.0 && barycentricCoord.x <= 1.0 &&
-		barycentricCoord.y >= 0.0 && barycentricCoord.y <= 1.0 &&
-		barycentricCoord.z >= 0.0 && barycentricCoord.z <= 1.0;
-}
-
-__host__ __device__ static
-float getZAtCoordinate(const glm::vec3 barycentricCoord, const Triangle tri) {
-	return -(barycentricCoord.x * tri.v[0].screenPosition.z
-		+ barycentricCoord.y * tri.v[1].screenPosition.z
-		+ barycentricCoord.z * tri.v[2].screenPosition.z);
-}
-
-/**
-* Perform scanline rasterization on a triangle
-*/
-__global__
-void rasterization(int w, int h, int primitiveCount, Triangle* primitives, uint32_t* buf) 
-{
-	int index = ((blockIdx.x * blockDim.x) + threadIdx.x) + (((blockIdx.y * blockDim.y) + threadIdx.y) * w);
-
-	if (index < primitiveCount) 
-	{
-		// Only doing scanline triangle atm
-		int minX = fmaxf(round(primitives[index].boundingBox.min.x), 0.0f), minY = fmaxf(round(primitives[index].boundingBox.min.y), 0.0f);
-		int maxX = fminf(round(primitives[index].boundingBox.max.x), (float)w);
-
-		// Loop through each scanline, then each pixel on the line
-		for (int y = fminf(round(primitives[index].boundingBox.max.y), (float)h); y >= minY; y--) 
-		{
-			for (int x = minX; x <= maxX; x++) 
-			{
-				glm::vec3 baryCentricCoordinate = calculateBarycentricCoordinate(primitives[index], glm::vec2(x, y));
-				if (isBarycentricCoordInBounds(baryCentricCoordinate)) 
-				{
-					int z = getZAtCoordinate(baryCentricCoordinate, primitives[index]) * 10000.0f;
-					int depthIndex = w - x + (h - y) * w;
-					// fill in value
-				}
-			}
-		}
 	}
 }
 
 __host__
 __device__
-uint32_t getPixColor(int x, int y) {
-	return 0xffff0000;
+glm::vec3 getPixColor(int x, int y, Triangle primitive)
+{
+	glm::vec2 pixel{ x, y };
+
+	for (int i = 0; i < 3; ++i)
+	{
+		if (primitive.v[i].screenPosition.z < 0.f || primitive.v[i].screenPosition.z > 1.f) return glm::vec3(0.0f);
+		//else if (p.x > screenWidth || p.y > screenHeight || p.x < 0 || p.y < 0) return false;
+	}
+
+	for (size_t i = 0; i < 3; i++)
+	{
+		glm::vec2 p1{ primitive.v[(i + 2) % 3].screenPosition.x, primitive.v[(i + 2) % 3].screenPosition.y };
+		glm::vec2 p2{ primitive.v[i].screenPosition.x, primitive.v[i].screenPosition.y };
+
+		glm::vec2 edge = p1 - p2;
+		glm::vec2 pointToSide = pixel - p2;
+		if (Cross(edge, pointToSide) < 0)
+			return glm::vec3(0.0f);
+
+		//weights[i] = Elite::Cross(
+		//	pixel - m_ViewSpaceVertices[(i + 1) % m_ViewSpaceVertices.size()].xy,
+		//	Elite::FVector2(m_ViewSpaceVertices[(i + 2) % m_ViewSpaceVertices.size()].xy - m_ViewSpaceVertices[(i + 1) % m_ViewSpaceVertices.size()].xy)
+		//) / totalTriangleArea;
+	}
+
+	return glm::vec3(1.0f);
+}
+
+__global__
+void FragmentShading(uint32_t* buf, const Triangle* primitives, int primitiveCount)
+{
+	const int xPix = blockDim.x * blockIdx.x + threadIdx.x;
+	const int yPix = blockDim.y * blockIdx.y + threadIdx.y;
+
+	unsigned int pos = SCREEN_WIDTH * yPix + xPix;
+
+	glm::vec3 color{ 0.0f };
+	for (int i = 0; i < primitiveCount; ++i)
+	{
+		color = getPixColor(xPix, yPix, primitives[i]);
+	}
+
+	buf[pos] = (uint8_t)(color.x * 255) | ((uint8_t)(color.y * 255) << 8) | ((uint8_t)(color.z * 255) << 16) | (uint8_t)(255) << 24;
 }
 
 // Rasterizer loop
-void gpuRender(uint32_t* buf, uint32_t* depthBuf) {
-	//const int xPix = blockDim.x * blockIdx.x + threadIdx.x;
-	//const int yPix = blockDim.y * blockIdx.y + threadIdx.y;
-
-	//unsigned int pos = SCREEN_WIDTH * yPix + xPix;
-
+void gpuRender(uint32_t* buf, uint32_t* depthBuf) 
+{
 	int sideLength2d = 8;
 	dim3 blockSize2d(sideLength2d, sideLength2d);
 	dim3 blockCount2d((SCREEN_WIDTH + blockSize2d.x - 1) / blockSize2d.x,
@@ -252,20 +204,24 @@ void gpuRender(uint32_t* buf, uint32_t* depthBuf) {
 	int vertexBlockSize = VERTBLOCKSIZE, fragmentBlockSize = FRAGBLOCKSIZE;
 	int vertexGridSize = (g_VertCount + VERTBLOCKSIZE - 1) / VERTBLOCKSIZE;
 
+	const dim3 blocksPerGrid(H_TILES, V_TILES);
+	const dim3 threadsPerBlock(TILE_WIDTH, TILE_HEIGHT);
+
 
 	// Clear depth buffer
+
 
 	// Verte shading
 	VerteShading<<<vertexGridSize, vertexBlockSize>>>(g_pCamera->GetFar(), g_pCamera->GetNear(), g_VertCount, g_pVerteInBuffer, g_pVerteOutBuffer, g_pCamera->GetWorldViewProjectionMatrix());
 
 	// Primitive Assembly
-	//AssemblePrimitives<<<vertexGridSize, vertexBlockSize>>>(primitiveCount, g_pVerteOutBuffer, dev_primitives, g_pIndeBuffer);
+	AssemblePrimitives<<<vertexGridSize, vertexBlockSize>>>(primitiveCount, g_pVerteOutBuffer, dev_primitives, g_pIndeBuffer);
 
 	// Culling 
 
 
 	// Rasterization
-	//rasterization<<<blockCount2d, blockSize2d>>>(SCREEN_WIDTH, SCREEN_HEIGHT, primitiveCount, dev_primitives, buf);
+	FragmentShading<<<blocksPerGrid, threadsPerBlock >>>(buf, dev_primitives, primitiveCount);
 
 
 	checkCUDAError("gpuRender");
