@@ -111,24 +111,26 @@ inline float Cross(const glm::vec2 v1, const glm::vec2 v2)
 }
 
 __global__ 
-void VerteShading(float far, float near, int verteCount, const Vertex_In* verteInBuffer, Vertex_Out* verteOutBuffer, const glm::mat4 worldViewProjectionMatri)
+void VerteShading(int w, int h, float far, float near, int verteCount, const Vertex_In* verteInBuffer, Vertex_Out* verteOutBuffer, const glm::mat4 worldToView ,const glm::mat4 projectionMatrix)
 {
-	int index = ((blockIdx.x * blockDim.x) + threadIdx.x) + (((blockIdx.y * blockDim.y) + threadIdx.y) * static_cast<int>(SCREEN_WIDTH));
+	int index = ((blockIdx.x * blockDim.x) + threadIdx.x) + (((blockIdx.y * blockDim.y) + threadIdx.y) * w);
 
-	if (index >= verteCount) return;
-
-	glm::vec4 projectedVertex = worldViewProjectionMatri * glm::vec4(verteInBuffer[index].position, 1.0f);
-	glm::vec3 normDeviceCoordinates = glm::vec3(projectedVertex.x, projectedVertex.y, projectedVertex.z) / projectedVertex.w;
-
-	verteOutBuffer[index].screenPosition =
-		glm::vec4
+	if (index < verteCount)
 	{
-		((projectedVertex.x + 1) / 2) * static_cast<float>(SCREEN_WIDTH),
-		((1 - projectedVertex.y) / 2) * static_cast<float>(SCREEN_HEIGHT),
-		normDeviceCoordinates.z,
-		projectedVertex.w
-	};
-	verteOutBuffer[index].color = verteInBuffer[index].color;
+		glm::vec4 projectedVertex = projectionMatrix * worldToView * glm::vec4(verteInBuffer[index].position, 1.0f);
+
+		glm::vec3 normDeviceCoordinates = glm::vec3(projectedVertex.x, projectedVertex.y, projectedVertex.z) / projectedVertex.w;
+
+		verteOutBuffer[index].screenPosition =
+			glm::vec4
+		{
+			((projectedVertex.x + 1) / 2) * w,
+			((1 - projectedVertex.y) / 2) * h,
+			normDeviceCoordinates.z,
+			projectedVertex.w
+		};
+		verteOutBuffer[index].color = verteInBuffer[index].color;
+	}
 }
 
 __global__
@@ -153,7 +155,6 @@ __device__
 glm::vec3 getPixColor(int x, int y, Triangle primitive)
 {
 	float weights[3];
-
 	float totalTriangleArea = abs(Cross(glm::vec2{ primitive.v[0].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }, glm::vec2{ primitive.v[1].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }));
 
 	glm::vec2 pixel{ x, y };
@@ -166,8 +167,8 @@ glm::vec3 getPixColor(int x, int y, Triangle primitive)
 
 	for (size_t i = 0; i < 3; i++)
 	{
-		glm::vec2 p1{ primitive.v[(i + 2) % 3].screenPosition.x, primitive.v[(i + 2) % 3].screenPosition.y };
-		glm::vec2 p2{ primitive.v[i].screenPosition.x, primitive.v[i].screenPosition.y };
+		glm::vec2 p1{ primitive.v[(i + 2) % 3].screenPosition };
+		glm::vec2 p2{ primitive.v[i].screenPosition };
 
 		glm::vec2 edge = p1 - p2;
 		glm::vec2 pointToSide = pixel - p2;
@@ -223,12 +224,15 @@ void gpuRender(uint32_t* buf, uint32_t* depthBuf)
 	const dim3 blocksPerGrid(H_TILES, V_TILES);
 	const dim3 threadsPerBlock(TILE_WIDTH, TILE_HEIGHT);
 
+	int w = static_cast<int>(SCREEN_WIDTH);
+	int h = static_cast<int>(SCREEN_HEIGHT);
+
 
 	// Clear depth buffer
 
 
 	// Verte shading
-	VerteShading<<<vertexGridSize, vertexBlockSize>>>(g_pCamera->GetFar(), g_pCamera->GetNear(), g_VertCount, g_pVerteInBuffer, g_pVerteOutBuffer, g_pCamera->GetWorldViewProjectionMatrix());
+	VerteShading<<<vertexGridSize, vertexBlockSize>>>(w, h,g_pCamera->GetFar(), g_pCamera->GetNear(), g_VertCount, g_pVerteInBuffer, g_pVerteOutBuffer, g_pCamera->GetViewMatrix(), g_pCamera->GetProjectionMatrix());
 
 	// Primitive Assembly
 	AssemblePrimitives<<<vertexGridSize, vertexBlockSize>>>(primitiveCount, g_pVerteOutBuffer, dev_primitives, g_pIndeBuffer);

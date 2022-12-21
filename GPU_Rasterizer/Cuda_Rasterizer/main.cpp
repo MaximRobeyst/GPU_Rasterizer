@@ -92,10 +92,10 @@ int main(int argc, char* args[]) {
 
 	std::vector<int> indices
 	{
-		1, 2, 3
+		1,2,3
 	};
 
-	Camera* pCamera = new Camera{ glm::vec3{ 0,0,10.0f }, glm::vec3{ 0,0,1.0f }, 60.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
+	Camera* pCamera = new Camera{ glm::vec3{ 0,0,10.0f }, glm::vec3{ 0,0,-1.0f }, 45.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
 
 	InitBuffers(triangleVertices, indices);
 

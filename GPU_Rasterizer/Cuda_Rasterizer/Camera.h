@@ -2,6 +2,7 @@
 #include <cuda.h>
 
 #define GLM_FORCE_CUDA
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm\glm.hpp>
 
 #include <cuda_runtime.h>
@@ -14,6 +15,8 @@ public:
 	__host__ __device__ ~Camera();
 
 	__host__ __device__ glm::mat4 GetWorldMatrix();
+	__host__ __device__ glm::mat4 GetViewMatrix();
+	__host__ __device__ glm::mat4 GetProjectionMatrix();
 	__host__ __device__ glm::mat4 GetWorldViewProjectionMatrix();
 
 	__host__ __device__ void UpdatePosition(const glm::vec2& difference);
@@ -38,8 +41,8 @@ private:
 	glm::vec2 m_AbsoluteRotation{}; //Pitch(x) & Yaw(y) only
 	glm::vec3 m_RelativeTranslation{};
 
-	glm::mat4 m_WorldToView{};
-	glm::mat4 m_ViewMatri{};
+	glm::mat4 m_WorldMatrix{};
+	glm::mat4 m_ViewMatrix{};
 	glm::mat4 m_ProjectionMatrix{};
 	glm::mat4 m_WorldViewProjectionMatrix{};
 };

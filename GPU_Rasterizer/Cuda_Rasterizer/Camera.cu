@@ -1,6 +1,8 @@
 #include "Camera.h"
 #include "const.h"
 
+#define GLM_FORCE_CUDA
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -22,9 +24,7 @@ Camera::Camera(const glm::vec3& position, const glm::vec3& forward, float FOV, f
 	, m_Far{far}
 	, m_Near{near}
 {
-
-	m_WorldToView = glm::mat4(1.0f);
-	m_ProjectionMatrix = glm::perspective(glm::radians(60.0f), aspectRatio, near, far);
+	m_ProjectionMatrix = glm::perspective(glm::radians(FOV), aspectRatio, near, far);
 
 	UpdateMatrix();
 }
@@ -37,15 +37,28 @@ __host__
 __device__
 glm::mat4 Camera::GetWorldMatrix()
 {
-	return m_WorldToView;
+	return m_WorldMatrix;
+}
+
+__host__
+__device__
+glm::mat4 Camera::GetViewMatrix()
+{
+	return m_ViewMatrix;
+}
+
+__host__
+__device__
+glm::mat4 Camera::GetProjectionMatrix()
+{
+	return m_ProjectionMatrix;
 }
 
 __host__
 __device__
 glm::mat4 Camera::GetWorldViewProjectionMatrix()
 {
-
-	return m_WorldViewProjectionMatrix * m_WorldToView;
+	return m_WorldViewProjectionMatrix * m_WorldMatrix;
 }
 
 __host__
@@ -62,8 +75,32 @@ __host__
 __device__
 void Camera::UpdateMatrix()
 {
+	//FORWARD (zAxis) with YAW applied
+	glm::mat3 yawRotation = MakeRotationY(m_AbsoluteRotation.y * float(E_TO_RADIANS));
+	glm::vec3 zAxis = yawRotation * m_Forward;
+
+	//Calculate RIGHT (xAxis) based on transformed FORWARD
+	glm::vec3 xAxis = glm::normalize(glm::cross(glm::vec3{ 0.f,1.f,0.f }, zAxis));
+
+	//FORWARD with PITCH applied (based on xAxis)
+	glm::mat3 pitchRotation = MakeRotation(m_AbsoluteRotation.x * float(E_TO_RADIANS), xAxis);
+	zAxis = pitchRotation * zAxis;
+
+	//Calculate UP (yAxis)
+	glm::vec3 yAxis = glm::cross(zAxis, xAxis);
+
+	//Translate based on transformed axis
+	m_Position += m_RelativeTranslation.x * xAxis;
+	m_Position += m_RelativeTranslation.y * yAxis;
+	m_Position += m_RelativeTranslation.z * zAxis;
+
+	//Construct View2World Matrix
+	m_ViewMatrix = glm::lookAt(m_Position, m_Position + m_Forward, yAxis);
+	//Construct World2View Matrix || viewMatrix
+	m_WorldMatrix = glm::inverse(m_ViewMatrix);
+
 	// WorldViewProjectionMatrix = ProjectionMatrix * ViewMatrix * WorldMatrix
-	m_WorldViewProjectionMatrix = m_ProjectionMatrix * m_ViewMatri;
+	m_WorldViewProjectionMatrix = m_ProjectionMatrix * m_ViewMatrix;
 }
 
 __host__
