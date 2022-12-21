@@ -39,7 +39,7 @@ private:
 	glm::vec3 m_RelativeTranslation{};
 
 	glm::mat4 m_WorldToView{};
-	glm::mat4 m_ViewToWorld{};
+	glm::mat4 m_ViewMatri{};
 	glm::mat4 m_ProjectionMatrix{};
 	glm::mat4 m_WorldViewProjectionMatrix{};
 };

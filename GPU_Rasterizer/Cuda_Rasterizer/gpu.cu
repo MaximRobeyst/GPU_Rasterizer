@@ -132,11 +132,14 @@ void VerteShading(float far, float near, int verteCount, const Vertex_In* verteI
 }
 
 __global__
-void AssemblePrimitives(int primitiveCount, const Vertex_Out* vertexBufferOut, Triangle* primitives, const int* bufIdx) {
+void AssemblePrimitives(int primitiveCount, const Vertex_Out* vertexBufferOut, Triangle* primitives, const int* bufIdx) 
+{
 	int index = (blockIdx.x * blockDim.x) + threadIdx.x;
 
-	if (index < primitiveCount) {
-		for (int i = 0; i < 3; i++) {
+	if (index < primitiveCount) 
+	{
+		for (int i = 0; i < 3; i++) 
+		{
 			primitives[index].v[i] = vertexBufferOut[bufIdx[3 * index + i]];
 		}
 
@@ -149,6 +152,10 @@ __host__
 __device__
 glm::vec3 getPixColor(int x, int y, Triangle primitive)
 {
+	float weights[3];
+
+	float totalTriangleArea = abs(Cross(glm::vec2{ primitive.v[0].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }, glm::vec2{ primitive.v[1].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }));
+
 	glm::vec2 pixel{ x, y };
 
 	for (int i = 0; i < 3; ++i)
@@ -167,13 +174,22 @@ glm::vec3 getPixColor(int x, int y, Triangle primitive)
 		if (Cross(edge, pointToSide) < 0)
 			return glm::vec3(0.0f);
 
-		//weights[i] = Elite::Cross(
-		//	pixel - m_ViewSpaceVertices[(i + 1) % m_ViewSpaceVertices.size()].xy,
-		//	Elite::FVector2(m_ViewSpaceVertices[(i + 2) % m_ViewSpaceVertices.size()].xy - m_ViewSpaceVertices[(i + 1) % m_ViewSpaceVertices.size()].xy)
-		//) / totalTriangleArea;
+		weights[i] = Cross(
+			pixel - glm::vec2{ primitive.v[(i + 1) % 3].screenPosition },
+			glm::vec2(glm::vec2{ primitive.v[(i + 2) % 3].screenPosition } - glm::vec2{ primitive.v[(i + 1) % 3].screenPosition })
+		) / totalTriangleArea;
 	}
 
-	return glm::vec3(1.0f);
+	Vertex_Out endValue;
+
+	for (int i = 0; i < 3; ++i)
+	{
+		endValue.color += primitive.v[i].color;
+	}
+
+	endValue.color /= 3;
+
+	return endValue.color;
 }
 
 __global__

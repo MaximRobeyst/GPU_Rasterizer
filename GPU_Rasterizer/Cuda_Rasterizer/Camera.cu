@@ -1,7 +1,6 @@
 #include "Camera.h"
 #include "const.h"
 
-#define GLM_FORCE_CUDA
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -24,7 +23,8 @@ Camera::Camera(const glm::vec3& position, const glm::vec3& forward, float FOV, f
 	, m_Near{near}
 {
 
-	m_ProjectionMatrix = glm::perspective(m_FOV, aspectRatio, near, far);
+	m_WorldToView = glm::mat4(1.0f);
+	m_ProjectionMatrix = glm::perspective(glm::radians(60.0f), aspectRatio, near, far);
 
 	UpdateMatrix();
 }
@@ -62,32 +62,8 @@ __host__
 __device__
 void Camera::UpdateMatrix()
 {
-	//FORWARD (zAxis) with YAW applied
-	glm::mat3 yawRotation = MakeRotationY(m_AbsoluteRotation.y * float(E_TO_RADIANS));
-	glm::vec3 zAxis = yawRotation * m_Forward;
-
-	//Calculate RIGHT (xAxis) based on transformed FORWARD
-	glm::vec3 xAxis = glm::normalize(glm::cross(glm::vec3{ 0.f,1.f,0.f }, zAxis));
-
-	//FORWARD with PITCH applied (based on xAxis)
-	glm::mat3 pitchRotation = MakeRotation(m_AbsoluteRotation.x * float(E_TO_RADIANS), xAxis);
-	zAxis = pitchRotation * zAxis;
-
-	//Calculate UP (yAxis)
-	glm::vec3 yAxis = glm::cross(zAxis, xAxis);
-
-	//Translate based on transformed axis
-	m_Position += m_RelativeTranslation.x * xAxis;
-	m_Position += m_RelativeTranslation.y * yAxis;
-	m_Position += m_RelativeTranslation.z * zAxis;
-
-	//Construct View2World Matrix
-	m_ViewToWorld = glm::lookAt(m_Position, zAxis, yAxis);
-	//Construct World2View Matrix || viewMatrix
-	m_WorldToView = glm::mat4(1.0f);
-
 	// WorldViewProjectionMatrix = ProjectionMatrix * ViewMatrix * WorldMatrix
-	m_WorldViewProjectionMatrix = m_ProjectionMatrix * m_ViewToWorld;
+	m_WorldViewProjectionMatrix = m_ProjectionMatrix * m_ViewMatri;
 }
 
 __host__

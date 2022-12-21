@@ -16,7 +16,6 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include <vector>
-#include "Triangle.h"
 
 #define GLM_FORCE_CUDA
 #include <glm\glm.hpp>
@@ -87,8 +86,8 @@ int main(int argc, char* args[]) {
 	std::vector<Vertex_In> triangleVertices
 	{
 		Vertex_In{glm::vec3{0.0f, 2.0f, 0.0f}, glm::vec3{1.0f, 0.0f, 0.0f}},
-		Vertex_In{glm::vec3{-1.f, 0.f, 0.f}, glm::vec3{1.0f, 0.0f, 0.0f}},
-		Vertex_In{glm::vec3{1.f, 0.f, 0.0f}, glm::vec3{1.0f, 0.0f, 0.0f}}
+		Vertex_In{glm::vec3{-1.f, 0.f, 0.f}, glm::vec3{0.0f, 1.0f, 0.0f}},
+		Vertex_In{glm::vec3{1.f, 0.f, 0.0f}, glm::vec3{0.0f, 0.0f, 1.0f}}
 	};
 
 	std::vector<int> indices

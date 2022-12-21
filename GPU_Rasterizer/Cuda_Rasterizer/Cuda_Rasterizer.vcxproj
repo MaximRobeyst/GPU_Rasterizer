@@ -90,11 +90,9 @@
     <ClInclude Include="checkCUDAError.h" />
     <ClInclude Include="const.h" />
     <ClInclude Include="gpu.h" />
-    <ClInclude Include="Triangle.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="Triangle.cu" />
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
