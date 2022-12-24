@@ -29,6 +29,8 @@ static int g_IndeCount;
 static Triangle* dev_primitives = NULL;
 static int primitiveCount = 0;
 
+static float* g_DepthBuffer;
+
 #define VERTBLOCKSIZE 256
 #define FRAGBLOCKSIZE 256
 
@@ -81,7 +83,8 @@ void InitBuffers(const std::vector<Vertex_In>& vertices,const std::vector<int>& 
 }
 
 
-uint32_t * gpuAlloc(void) {
+uint32_t * gpuAllocScreenBuffer(void)
+{
 	uint32_t* gpu_mem;
 
 	cudaError_t err = cudaMalloc(&gpu_mem, SCREEN_SIZE * 4);
@@ -89,6 +92,16 @@ uint32_t * gpuAlloc(void) {
 
 	return gpu_mem;
 };
+
+float* gpuAllocDepthBuffer(void)
+{
+	float* gpu_mem;
+
+	cudaError_t err = cudaMalloc(&gpu_mem, SCREEN_SIZE * sizeof(float));
+	if (err != cudaSuccess) return NULL;
+
+	return gpu_mem;
+}
 
 void gpuFree(void* gpu_mem) {
 	cudaFree(gpu_mem);
@@ -115,22 +128,21 @@ void VerteShading(int w, int h, float far, float near, int verteCount, const Ver
 {
 	int index = ((blockIdx.x * blockDim.x) + threadIdx.x) + (((blockIdx.y * blockDim.y) + threadIdx.y) * w);
 
-	if (index < verteCount)
+	if (index >= verteCount) return;
+
+	glm::vec4 projectedVertex = projectionMatrix * worldToView * glm::vec4(verteInBuffer[index].position, 1.0f);
+
+	glm::vec3 normDeviceCoordinates = glm::vec3(projectedVertex.x, projectedVertex.y, projectedVertex.z) / projectedVertex.w;
+
+	verteOutBuffer[index].screenPosition =
+		glm::vec4
 	{
-		glm::vec4 projectedVertex = projectionMatrix * worldToView * glm::vec4(verteInBuffer[index].position, 1.0f);
-
-		glm::vec3 normDeviceCoordinates = glm::vec3(projectedVertex.x, projectedVertex.y, projectedVertex.z) / projectedVertex.w;
-
-		verteOutBuffer[index].screenPosition =
-			glm::vec4
-		{
-			((projectedVertex.x + 1) / 2) * w,
-			((1 - projectedVertex.y) / 2) * h,
-			normDeviceCoordinates.z,
-			projectedVertex.w
-		};
-		verteOutBuffer[index].color = verteInBuffer[index].color;
-	}
+		((normDeviceCoordinates.x + 1) / 2) * w,
+		((1 - normDeviceCoordinates.y) / 2) * h,
+		normDeviceCoordinates.z,
+		projectedVertex.w
+	};
+	verteOutBuffer[index].color = verteInBuffer[index].color;
 }
 
 __global__
@@ -152,7 +164,23 @@ void AssemblePrimitives(int primitiveCount, const Vertex_Out* vertexBufferOut, T
 
 __host__
 __device__
-glm::vec3 getPixColor(int x, int y, Triangle primitive)
+glm::vec3 MaxToOne(const glm::vec3 color)
+{
+	float highestValue{ 1 };
+
+	if (color.r > highestValue)
+		highestValue = color.r;
+	if (color.g > highestValue)
+		highestValue = color.g;
+	if (color.b > highestValue)
+		highestValue = color.b;
+
+	return glm::vec3{ color.r / highestValue, color.g / highestValue, color.b / highestValue };
+}
+
+__host__
+__device__
+bool getPixColor(int x, int y, float* pixelDepth, glm::vec3* color, Triangle primitive)
 {
 	float weights[3];
 	float totalTriangleArea = abs(Cross(glm::vec2{ primitive.v[0].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }, glm::vec2{ primitive.v[1].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }));
@@ -161,11 +189,11 @@ glm::vec3 getPixColor(int x, int y, Triangle primitive)
 
 	for (int i = 0; i < 3; ++i)
 	{
-		if (primitive.v[i].screenPosition.z < 0.f || primitive.v[i].screenPosition.z > 1.f) return glm::vec3(0.0f);
+		if (primitive.v[i].screenPosition.z < 0.f || primitive.v[i].screenPosition.z > 1.f) return false;
 		//else if (p.x > screenWidth || p.y > screenHeight || p.x < 0 || p.y < 0) return false;
 	}
 
-	for (size_t i = 0; i < 3; i++)
+	for (size_t i = 0; i < 3; ++i)
 	{
 		glm::vec2 p1{ primitive.v[(i + 2) % 3].screenPosition };
 		glm::vec2 p2{ primitive.v[i].screenPosition };
@@ -173,13 +201,22 @@ glm::vec3 getPixColor(int x, int y, Triangle primitive)
 		glm::vec2 edge = p1 - p2;
 		glm::vec2 pointToSide = pixel - p2;
 		if (Cross(edge, pointToSide) < 0)
-			return glm::vec3(0.0f);
+			return false;
 
 		weights[i] = Cross(
 			pixel - glm::vec2{ primitive.v[(i + 1) % 3].screenPosition },
 			glm::vec2(glm::vec2{ primitive.v[(i + 2) % 3].screenPosition } - glm::vec2{ primitive.v[(i + 1) % 3].screenPosition })
 		) / totalTriangleArea;
 	}
+
+	float currentDepth{};
+	for (size_t i = 0; i < 3; ++i)
+		currentDepth += (1.f / primitive.v[i].screenPosition.z) * weights[i];
+	currentDepth = 1.f / currentDepth;
+
+	if (pixelDepth[0] < currentDepth)
+		return false;
+	pixelDepth[0] = currentDepth;
 
 	Vertex_Out endValue;
 
@@ -190,11 +227,12 @@ glm::vec3 getPixColor(int x, int y, Triangle primitive)
 
 	endValue.color /= 3;
 
-	return endValue.color;
+	color[0] = MaxToOne(endValue.color);
+	return true;
 }
 
 __global__
-void FragmentShading(uint32_t* buf, const Triangle* primitives, int primitiveCount)
+void FragmentShading(uint32_t* buf, float* depthBuf, const Triangle* primitives, int primitiveCount)
 {
 	const int xPix = blockDim.x * blockIdx.x + threadIdx.x;
 	const int yPix = blockDim.y * blockIdx.y + threadIdx.y;
@@ -202,16 +240,24 @@ void FragmentShading(uint32_t* buf, const Triangle* primitives, int primitiveCou
 	unsigned int pos = SCREEN_WIDTH * yPix + xPix;
 
 	glm::vec3 color{ 0.0f };
+	float depth = 1.0f;
 	for (int i = 0; i < primitiveCount; ++i)
 	{
-		color = getPixColor(xPix, yPix, primitives[i]);
+		if (!getPixColor(xPix, yPix, &depth, &color, primitives[i]))
+			continue;
 	}
 
-	buf[pos] = (uint8_t)(color.x * 255) | ((uint8_t)(color.y * 255) << 8) | ((uint8_t)(color.z * 255) << 16) | (uint8_t)(255) << 24;
+	buf[pos] = (uint8_t)(color.b * 255.0f) | ((uint8_t)(color.g * 255) << 8) | ((uint8_t)(color.r * 255) << 16) | (uint8_t)(255.0f) << 24;
+}
+
+void ClearDepthBuffer(float* depthBuf)
+{
+	for(int i = 0; i < SCREEN_SIZE; ++i)
+		depthBuf[i] = 1.f;
 }
 
 // Rasterizer loop
-void gpuRender(uint32_t* buf, uint32_t* depthBuf) 
+void gpuRender(uint32_t* buf, float* depthBuf) 
 {
 	int sideLength2d = 8;
 	dim3 blockSize2d(sideLength2d, sideLength2d);
@@ -229,7 +275,7 @@ void gpuRender(uint32_t* buf, uint32_t* depthBuf)
 
 
 	// Clear depth buffer
-
+	//ClearDepthBuffer(depthBuf);
 
 	// Verte shading
 	VerteShading<<<vertexGridSize, vertexBlockSize>>>(w, h,g_pCamera->GetFar(), g_pCamera->GetNear(), g_VertCount, g_pVerteInBuffer, g_pVerteOutBuffer, g_pCamera->GetViewMatrix(), g_pCamera->GetProjectionMatrix());
@@ -241,7 +287,7 @@ void gpuRender(uint32_t* buf, uint32_t* depthBuf)
 
 
 	// Rasterization
-	FragmentShading<<<blocksPerGrid, threadsPerBlock >>>(buf, dev_primitives, primitiveCount);
+	FragmentShading<<<blocksPerGrid, threadsPerBlock >>>(buf, depthBuf, dev_primitives, primitiveCount);
 
 
 	checkCUDAError("gpuRender");

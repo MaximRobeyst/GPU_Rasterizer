@@ -5,6 +5,7 @@
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <iostream>
 
 Camera::Camera()
 	: m_AspectRatio{SCREEN_WIDTH / SCREEN_HEIGHT}
@@ -61,14 +62,13 @@ glm::mat4 Camera::GetWorldViewProjectionMatrix()
 	return m_WorldViewProjectionMatrix * m_WorldMatrix;
 }
 
-__host__
-__device__
-void Camera::UpdatePosition(const glm::vec2& difference)
+void Camera::UpdatePosition(const glm::vec3& difference)
 {
-	m_Position.x += difference.x;
-	m_Position.z += difference.y;
+	m_Position += difference;
 
 	UpdateMatrix();
+
+	std::cout << "(" << m_Position.x << ", " << m_Position.y << ", " << m_Position.z << ")" << std::endl;
 }
 
 __host__

@@ -22,7 +22,7 @@
 
 void render(SDL_Surface* screen, void* cuda_pixels, void* depth_pixels) 
 {
-	gpuRender((uint32_t*)cuda_pixels, (uint32_t*)depth_pixels);
+	gpuRender((uint32_t*)cuda_pixels, (float*)depth_pixels);
 	if ( gpuBlit(cuda_pixels, screen->pixels) != 0 ) 
 	{
 		cudaError_t err{ cudaGetLastError() };
@@ -72,12 +72,12 @@ int main(int argc, char* args[]) {
         exit(1);
 	}
 
-	uint32_t* gpu_Screen = gpuAlloc();	
+	uint32_t* gpu_Screen = gpuAllocScreenBuffer();	
 	if ( gpu_Screen == NULL ) {
 		std::cerr << "failed to alloc gpu memory" << std::endl;
 	}
 
-	uint32_t* gpu_Depth = gpuAlloc();
+	float* gpu_Depth = gpuAllocDepthBuffer();
 	if (gpu_Depth == NULL) {
 		std::cerr << "failed to alloc gpu memory" << std::endl;
 	}
@@ -85,17 +85,27 @@ int main(int argc, char* args[]) {
 
 	std::vector<Vertex_In> triangleVertices
 	{
-		Vertex_In{glm::vec3{0.0f, 2.0f, 0.0f}, glm::vec3{1.0f, 0.0f, 0.0f}},
-		Vertex_In{glm::vec3{-1.f, 0.f, 0.f}, glm::vec3{0.0f, 1.0f, 0.0f}},
-		Vertex_In{glm::vec3{1.f, 0.f, 0.0f}, glm::vec3{0.0f, 0.0f, 1.0f}}
+		// Triangle 1
+		Vertex_In{glm::vec3{0.0f, 1.0f, -7.5f}, glm::vec3{1.0f, 0.0f, 0.0f}},
+		Vertex_In{glm::vec3{-.5f, 0.f, -7.5f}, glm::vec3{1.0f, 0.0f, 0.0f}},
+		Vertex_In{glm::vec3{.5f, 0.f, -7.5f}, glm::vec3{1.0f, 0.0f, 0.0f}},
+
+		// Triangle
+		Vertex_In{glm::vec3{0.0f, 2.0f, -10.0f}, glm::vec3{1.0f, 0.0f, 0.0f}},
+		Vertex_In{glm::vec3{-1.f, 0.f, -10.f}, glm::vec3{0.0f, 1.0f, 0.0f}},
+		Vertex_In{glm::vec3{1.f, 0.f, -10.0f}, glm::vec3{0.0f, 0.0f, 1.0f}}
 	};
+
+	std::vector<Vertex_Out> projectedVertices{};
+	projectedVertices.resize(3);
 
 	std::vector<int> indices
 	{
-		1,2,3
+		0,	1,	2,
+		3,	4,	5
 	};
 
-	Camera* pCamera = new Camera{ glm::vec3{ 0,0,10.0f }, glm::vec3{ 0,0,-1.0f }, 45.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
+	Camera* pCamera = new Camera{ glm::vec3{ 0,0,0.f }, glm::vec3{ 0,0,-1.0f }, 45.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
 
 	InitBuffers(triangleVertices, indices);
 
@@ -110,21 +120,28 @@ int main(int argc, char* args[]) {
             }
 			if (e.type == SDL_KEYDOWN)
 			{
-				glm::vec2 newPosition{};
+				glm::vec3 newPosition{};
 				if (e.key.keysym.sym == SDLK_w)
-					newPosition.y = 1;
+					newPosition.z = 1;
 				if (e.key.keysym.sym == SDLK_s)
-					newPosition.y = -1;
+					newPosition.z = -1;
 				if (e.key.keysym.sym == SDLK_d)
 					newPosition.x = 1;
 				if (e.key.keysym.sym == SDLK_a)
 					newPosition.x = -1;
+				if (e.key.keysym.sym == SDLK_LSHIFT)
+					newPosition.y = 1;
+				if (e.key.keysym.sym == SDLK_LCTRL)
+					newPosition.y = -1;
 
 
 				pCamera->UpdatePosition(newPosition);
 			}
 
         }
+
+		int w = SCREEN_WIDTH;
+		int h = SCREEN_HEIGHT;
 
 		uint32_t now = SDL_GetTicks();
 		if (next_time_step <= now) 
@@ -134,6 +151,27 @@ int main(int argc, char* args[]) {
 			SDL_LockSurface(default_screen);
 			render(default_screen, gpu_Screen, gpu_Depth);
 			SDL_UnlockSurface(default_screen);
+
+			//for (int i = 0; i < 3; ++i)
+			//{
+			//	glm::vec4 projectedVertex = pCamera->GetProjectionMatrix() * pCamera->GetViewMatrix() * glm::vec4(triangleVertices[i].position, 1.0f);
+			//
+			//	glm::vec3 normDeviceCoordinates = glm::vec3(projectedVertex.x, projectedVertex.y, projectedVertex.z) / projectedVertex.w;
+			//
+			//	projectedVertices[i].screenPosition =
+			//		glm::vec4
+			//	{
+			//		((normDeviceCoordinates.x + 1) / 2) * w,
+			//		((normDeviceCoordinates.y + 1) / 2) * h,
+			//		normDeviceCoordinates.z,
+			//		projectedVertex.w
+			//	};
+			//	projectedVertices[i].color = triangleVertices[i].color;
+			//
+			//	std::cout << "from vert ( " << triangleVertices[i].position.x << ", " << triangleVertices[i].position.y << ", " << triangleVertices[i].position.z <<
+			//		") transfomed into (" << projectedVertices[i].screenPosition.x << ", " << projectedVertices[i].screenPosition.y << ", " << projectedVertices[i].screenPosition.z << ") " << std::endl;
+			//}
+
 
 			SDL_UpdateTexture(sdlTexture, NULL, default_screen->pixels, default_screen->pitch);
 			SDL_RenderClear(sdlRenderer);

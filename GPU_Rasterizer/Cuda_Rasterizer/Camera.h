@@ -19,7 +19,7 @@ public:
 	__host__ __device__ glm::mat4 GetProjectionMatrix();
 	__host__ __device__ glm::mat4 GetWorldViewProjectionMatrix();
 
-	__host__ __device__ void UpdatePosition(const glm::vec2& difference);
+	void UpdatePosition(const glm::vec3& difference);
 
 	float GetFar() const { return m_Far; }
 	float GetNear() const { return m_Near; }

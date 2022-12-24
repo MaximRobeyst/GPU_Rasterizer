@@ -42,8 +42,9 @@ struct Triangle {
 void gpuInit(Camera* pCamera);
 void InitBuffers(const std::vector<Vertex_In>& vertices, const std::vector<int>& indices);
 
-uint32_t * gpuAlloc(void) ;
+uint32_t* gpuAllocScreenBuffer(void);
+float * gpuAllocDepthBuffer(void) ;
 void gpuFree(void* gpu_mem);
 int gpuBlit(void* src, void* dst);
 
-void gpuRender(uint32_t* screenBuffer, uint32_t* depthBuffer);
+void gpuRender(uint32_t* screenBuffer, float* depthBuffer);
