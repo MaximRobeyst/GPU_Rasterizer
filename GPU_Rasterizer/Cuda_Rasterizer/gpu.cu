@@ -123,6 +123,20 @@ inline float Cross(const glm::vec2 v1, const glm::vec2 v2)
 	return v1.x * v2.y - v1.y * v2.x;
 }
 
+//__host__
+//__device__
+//float min(float left, float right)
+//{
+//	return left < right ? left : right;
+//}
+//
+//__host__
+//__device__
+//float max(float left, float right)
+//{
+//	return left > right ? left : right;
+//}
+
 __global__ 
 void VerteShading(int w, int h, float far, float near, int verteCount, const Vertex_In* verteInBuffer, Vertex_Out* verteOutBuffer, const glm::mat4 worldToView ,const glm::mat4 projectionMatrix)
 {
@@ -157,8 +171,21 @@ void AssemblePrimitives(int primitiveCount, const Vertex_Out* vertexBufferOut, T
 			primitives[index].v[i] = vertexBufferOut[bufIdx[3 * index + i]];
 		}
 
+		primitives[index].boundingBox.min = glm::vec3{
+			min(primitives[index].v[0].screenPosition.x, min(primitives[index].v[1].screenPosition.x, primitives[index].v[2].screenPosition.x)),
+			min(primitives[index].v[0].screenPosition.y, min(primitives[index].v[1].screenPosition.y, primitives[index].v[2].screenPosition.y)),
+			min(primitives[index].v[0].screenPosition.z, min(primitives[index].v[1].screenPosition.z, primitives[index].v[2].screenPosition.z)),
+		};
+
+		primitives[index].boundingBox.max = glm::vec3{
+			max(primitives[index].v[0].screenPosition.x, max(primitives[index].v[1].screenPosition.x, primitives[index].v[2].screenPosition.x)),
+			max(primitives[index].v[0].screenPosition.y, max(primitives[index].v[1].screenPosition.y, primitives[index].v[2].screenPosition.y)),
+			max(primitives[index].v[0].screenPosition.z, max(primitives[index].v[1].screenPosition.z, primitives[index].v[2].screenPosition.z)),
+		};
+
 		//primitives[index].boundingBox = getAABBForTriangle(primitives[index]);
 		primitives[index].visible = true;
+
 	}
 }
 
@@ -243,6 +270,9 @@ void FragmentShading(uint32_t* buf, float* depthBuf, const Triangle* primitives,
 	float depth = 1.0f;
 	for (int i = 0; i < primitiveCount; ++i)
 	{
+		if (xPix < primitives[i].boundingBox.min.x || xPix > primitives[i].boundingBox.max.x) continue;
+		if (yPix < primitives[i].boundingBox.min.y || yPix > primitives[i].boundingBox.max.y) continue;
+
 		if (!getPixColor(xPix, yPix, &depth, &color, primitives[i]))
 			continue;
 	}
