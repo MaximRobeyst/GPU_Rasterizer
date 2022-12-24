@@ -222,7 +222,7 @@ bool getPixColor(int x, int y, float* pixelDepth, glm::vec3* color, Triangle pri
 
 	for (int i = 0; i < 3; ++i)
 	{
-		endValue.color += primitive.v[i].color;
+		endValue.color += primitive.v[i].color * weights[i];
 	}
 
 	endValue.color /= 3;

@@ -90,9 +90,11 @@
     <ClInclude Include="checkCUDAError.h" />
     <ClInclude Include="const.h" />
     <ClInclude Include="gpu.h" />
+    <ClInclude Include="RastizerDebugger.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="RastizerDebugger.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />

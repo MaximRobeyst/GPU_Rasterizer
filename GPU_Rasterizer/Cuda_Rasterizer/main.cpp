@@ -20,6 +20,8 @@
 #define GLM_FORCE_CUDA
 #include <glm\glm.hpp>
 
+#include "RastizerDebugger.h"
+
 void render(SDL_Surface* screen, void* cuda_pixels, void* depth_pixels) 
 {
 	gpuRender((uint32_t*)cuda_pixels, (float*)depth_pixels);
@@ -108,6 +110,10 @@ int main(int argc, char* args[]) {
 	Camera* pCamera = new Camera{ glm::vec3{ 0,0,0.f }, glm::vec3{ 0,0,-1.0f }, 45.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
 
 	InitBuffers(triangleVertices, indices);
+
+	//RastizerDebugger rasterizerDebugger{ pCamera, triangleVertices, indices };
+	//
+	//rasterizerDebugger.Render();
 
     while (1) {
 
