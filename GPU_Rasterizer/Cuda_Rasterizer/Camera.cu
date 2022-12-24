@@ -5,7 +5,9 @@
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/euler_angles.hpp>
 #include <iostream>
+#include <SDL.h>
 
 Camera::Camera()
 	: m_AspectRatio{SCREEN_WIDTH / SCREEN_HEIGHT}
@@ -71,23 +73,61 @@ void Camera::UpdatePosition(const glm::vec3& difference)
 	std::cout << "(" << m_Position.x << ", " << m_Position.y << ", " << m_Position.z << ")" << std::endl;
 }
 
+void Camera::Update(float elapsedSec)
+{
+	//Capture Input (absolute) Rotation & (relative) Movement
+	//*************
+	//Keyboard Input
+	const uint8_t* pKeyboardState = SDL_GetKeyboardState(0);
+	float keyboardSpeed = pKeyboardState[SDL_SCANCODE_LSHIFT] ? m_KeyboardMoveSensitivity * m_KeyboardMoveMultiplier : m_KeyboardMoveSensitivity;
+	m_RelativeTranslation.x = (pKeyboardState[SDL_SCANCODE_D] - pKeyboardState[SDL_SCANCODE_A]) * keyboardSpeed * elapsedSec;
+	m_RelativeTranslation.y = 0;
+	m_RelativeTranslation.z = (pKeyboardState[SDL_SCANCODE_W] - pKeyboardState[SDL_SCANCODE_S]) * keyboardSpeed * elapsedSec;
+
+	//Mouse Input
+	int x, y = 0;
+	uint32_t mouseState = SDL_GetRelativeMouseState(&x, &y);
+	if (mouseState == SDL_BUTTON_LMASK)
+	{
+		m_RelativeTranslation.z += y * m_MouseMoveSensitivity * elapsedSec;
+		m_AbsoluteRotation.y -= x * m_MouseRotationSensitivity;
+	}
+	else if (mouseState == SDL_BUTTON_RMASK)
+	{
+		m_AbsoluteRotation.x -= y * m_MouseRotationSensitivity;
+		m_AbsoluteRotation.y -= x * m_MouseRotationSensitivity;
+	}
+	else if (mouseState == (SDL_BUTTON_LMASK | SDL_BUTTON_RMASK))
+	{
+		m_RelativeTranslation.y -= y * m_MouseMoveSensitivity * elapsedSec;
+	}
+
+	//Update LookAt (view2world & world2view matrices)
+	//*************
+	UpdateMatrix();
+}
+
 __host__
 __device__
 void Camera::UpdateMatrix()
 {
 	//FORWARD (zAxis) with YAW applied
-	glm::mat3 yawRotation = MakeRotationY(m_AbsoluteRotation.y * float(E_TO_RADIANS));
+	//glm::mat3 yawRotation = MakeRotationY(m_AbsoluteRotation.y * float(E_TO_RADIANS));
+	glm::mat3 yawRotation = glm::eulerAngleY(glm::radians(m_AbsoluteRotation.y));
+
 	glm::vec3 zAxis = yawRotation * m_Forward;
 
 	//Calculate RIGHT (xAxis) based on transformed FORWARD
-	glm::vec3 xAxis = glm::normalize(glm::cross(glm::vec3{ 0.f,1.f,0.f }, zAxis));
+	glm::vec3 xAxis = glm::normalize(glm::cross(zAxis, glm::vec3{ 0.f,1.f,0.f }));
 
 	//FORWARD with PITCH applied (based on xAxis)
-	glm::mat3 pitchRotation = MakeRotation(m_AbsoluteRotation.x * float(E_TO_RADIANS), xAxis);
+
+	glm::mat4 identity = glm::mat4(1.0f);
+	glm::mat3 pitchRotation = glm::rotate(identity,glm::radians(m_AbsoluteRotation.x), xAxis);
 	zAxis = pitchRotation * zAxis;
 
 	//Calculate UP (yAxis)
-	glm::vec3 yAxis = glm::cross(zAxis, xAxis);
+	glm::vec3 yAxis = glm::cross(xAxis, zAxis);
 
 	//Translate based on transformed axis
 	m_Position += m_RelativeTranslation.x * xAxis;
@@ -95,7 +135,7 @@ void Camera::UpdateMatrix()
 	m_Position += m_RelativeTranslation.z * zAxis;
 
 	//Construct View2World Matrix
-	m_ViewMatrix = glm::lookAt(m_Position, m_Position + m_Forward, yAxis);
+	m_ViewMatrix = glm::lookAt(m_Position, m_Position + zAxis, yAxis);
 	//Construct World2View Matrix || viewMatrix
 	m_WorldMatrix = glm::inverse(m_ViewMatrix);
 

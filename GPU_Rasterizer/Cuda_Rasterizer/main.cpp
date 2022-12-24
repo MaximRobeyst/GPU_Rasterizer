@@ -16,6 +16,7 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include <vector>
+#include <chrono>
 
 #define GLM_FORCE_CUDA
 #include <glm\glm.hpp>
@@ -88,9 +89,9 @@ int main(int argc, char* args[]) {
 	std::vector<Vertex_In> triangleVertices
 	{
 		// Triangle 1
-		Vertex_In{glm::vec3{0.0f, 1.0f, -7.5f}, glm::vec3{1.0f, 0.0f, 0.0f}},
-		Vertex_In{glm::vec3{-.5f, 0.f, -7.5f}, glm::vec3{1.0f, 0.0f, 0.0f}},
-		Vertex_In{glm::vec3{.5f, 0.f, -7.5f}, glm::vec3{1.0f, 0.0f, 0.0f}},
+		Vertex_In{glm::vec3{0.0f, 1.0f, -7.5f}, glm::vec3{1.0f, 1.0f, 1.0f}},
+		Vertex_In{glm::vec3{-.5f, 0.f, -7.5f}, glm::vec3{1.0f, 1.0f, 1.0f}},
+		Vertex_In{glm::vec3{.5f, 0.f, -7.5f}, glm::vec3{1.0f, 1.0f, 1.0f}},
 
 		// Triangle
 		Vertex_In{glm::vec3{0.0f, 2.0f, -10.0f}, glm::vec3{1.0f, 0.0f, 0.0f}},
@@ -98,8 +99,8 @@ int main(int argc, char* args[]) {
 		Vertex_In{glm::vec3{1.f, 0.f, -10.0f}, glm::vec3{0.0f, 0.0f, 1.0f}}
 	};
 
-	std::vector<Vertex_Out> projectedVertices{};
-	projectedVertices.resize(3);
+	//std::vector<Vertex_Out> projectedVertices{};
+	//projectedVertices.resize(3);
 
 	std::vector<int> indices
 	{
@@ -110,85 +111,39 @@ int main(int argc, char* args[]) {
 	Camera* pCamera = new Camera{ glm::vec3{ 0,0,0.f }, glm::vec3{ 0,0,-1.0f }, 45.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
 
 	InitBuffers(triangleVertices, indices);
+	float elapsedSec = 0.0f;
 
-	//RastizerDebugger rasterizerDebugger{ pCamera, triangleVertices, indices };
-	//
-	//rasterizerDebugger.Render();
+	auto t1 = std::chrono::steady_clock::now();
 
-    while (1) {
+	while (1)
+	{
+		auto t2 = std::chrono::steady_clock::now();
+		float elapsedSec{ std::chrono::duration<float>(t2 - t1).count() };
+		t1 = t2;
 
-        SDL_Event e;
-        if (SDL_PollEvent(&e)) 
+		SDL_Event e;
+		if (SDL_PollEvent(&e)) 
 		{
-            if (e.type == SDL_QUIT) 
+		    if (e.type == SDL_QUIT) 
 			{
-                break;
-            }
-			if (e.type == SDL_KEYDOWN)
-			{
-				glm::vec3 newPosition{};
-				if (e.key.keysym.sym == SDLK_w)
-					newPosition.z = 1;
-				if (e.key.keysym.sym == SDLK_s)
-					newPosition.z = -1;
-				if (e.key.keysym.sym == SDLK_d)
-					newPosition.x = 1;
-				if (e.key.keysym.sym == SDLK_a)
-					newPosition.x = -1;
-				if (e.key.keysym.sym == SDLK_LSHIFT)
-					newPosition.y = 1;
-				if (e.key.keysym.sym == SDLK_LCTRL)
-					newPosition.y = -1;
-
-
-				pCamera->UpdatePosition(newPosition);
-			}
-
-        }
-
-		int w = SCREEN_WIDTH;
-		int h = SCREEN_HEIGHT;
-
-		uint32_t now = SDL_GetTicks();
-		if (next_time_step <= now) 
-		{
-			gpuInit(pCamera);
-
-			SDL_LockSurface(default_screen);
-			render(default_screen, gpu_Screen, gpu_Depth);
-			SDL_UnlockSurface(default_screen);
-
-			//for (int i = 0; i < 3; ++i)
-			//{
-			//	glm::vec4 projectedVertex = pCamera->GetProjectionMatrix() * pCamera->GetViewMatrix() * glm::vec4(triangleVertices[i].position, 1.0f);
-			//
-			//	glm::vec3 normDeviceCoordinates = glm::vec3(projectedVertex.x, projectedVertex.y, projectedVertex.z) / projectedVertex.w;
-			//
-			//	projectedVertices[i].screenPosition =
-			//		glm::vec4
-			//	{
-			//		((normDeviceCoordinates.x + 1) / 2) * w,
-			//		((normDeviceCoordinates.y + 1) / 2) * h,
-			//		normDeviceCoordinates.z,
-			//		projectedVertex.w
-			//	};
-			//	projectedVertices[i].color = triangleVertices[i].color;
-			//
-			//	std::cout << "from vert ( " << triangleVertices[i].position.x << ", " << triangleVertices[i].position.y << ", " << triangleVertices[i].position.z <<
-			//		") transfomed into (" << projectedVertices[i].screenPosition.x << ", " << projectedVertices[i].screenPosition.y << ", " << projectedVertices[i].screenPosition.z << ") " << std::endl;
-			//}
-
-
-			SDL_UpdateTexture(sdlTexture, NULL, default_screen->pixels, default_screen->pitch);
-			SDL_RenderClear(sdlRenderer);
-			SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, NULL);
-			SDL_RenderPresent(sdlRenderer);
-
-			next_time_step += time_step;
-		} else {
-			SDL_Delay(next_time_step - now);
+		        break;
+		    }
 		}
-    }
+
+		pCamera->Update(elapsedSec);
+		gpuInit(pCamera);
+
+		SDL_LockSurface(default_screen);
+		render(default_screen, gpu_Screen, gpu_Depth);
+		SDL_UnlockSurface(default_screen);
+
+		SDL_UpdateTexture(sdlTexture, NULL, default_screen->pixels, default_screen->pitch);
+		SDL_RenderClear(sdlRenderer);
+		SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, NULL);
+		SDL_RenderPresent(sdlRenderer);
+
+		std::cout << "FPS: " << 1.0f / elapsedSec << std::endl;
+	}
 
   if (window == NULL) {
 	  std::cerr << "could not create window: " << SDL_GetError() << std::endl;

@@ -20,6 +20,8 @@ public:
 	__host__ __device__ glm::mat4 GetWorldViewProjectionMatrix();
 
 	void UpdatePosition(const glm::vec3& difference);
+	void Update(float elapsedSec);
+
 
 	float GetFar() const { return m_Far; }
 	float GetNear() const { return m_Near; }
@@ -28,6 +30,11 @@ private:
 	__host__ __device__ void UpdateMatrix();
 	__host__ __device__ glm::mat3 MakeRotationY(float f);
 	__host__ __device__ glm::mat3 MakeRotation(float f, glm::vec3 axis);
+
+	const float m_KeyboardMoveSensitivity{ 15.f };
+	const float m_KeyboardMoveMultiplier{ 10.f };
+	const float m_MouseRotationSensitivity{ .1f };
+	const float m_MouseMoveSensitivity{ 2.f };
 
 	const float m_AspectRatio;
 	const float m_Far;
