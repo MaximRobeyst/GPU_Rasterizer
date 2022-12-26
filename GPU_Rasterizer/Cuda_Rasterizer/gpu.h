@@ -28,6 +28,11 @@ struct Vertex_Out
 	glm::vec3 color;
 };
 
+struct depthInfo
+{
+	float depth;
+};
+
 struct BoundingBox {
 	glm::vec3 min;
 	glm::vec3 max;
@@ -47,4 +52,4 @@ float * gpuAllocDepthBuffer(void) ;
 void gpuFree(void* gpu_mem);
 int gpuBlit(void* src, void* dst);
 
-void gpuRender(uint32_t* screenBuffer, float* depthBuffer);
+void gpuRender(uint32_t* screenBuffer);

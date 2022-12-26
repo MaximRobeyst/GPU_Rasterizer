@@ -23,9 +23,9 @@
 
 #include "RastizerDebugger.h"
 
-void render(SDL_Surface* screen, void* cuda_pixels, void* depth_pixels) 
+void render(SDL_Surface* screen, void* cuda_pixels) 
 {
-	gpuRender((uint32_t*)cuda_pixels, (float*)depth_pixels);
+	gpuRender((uint32_t*)cuda_pixels);
 	if ( gpuBlit(cuda_pixels, screen->pixels) != 0 ) 
 	{
 		cudaError_t err{ cudaGetLastError() };
@@ -80,10 +80,10 @@ int main(int argc, char* args[]) {
 		std::cerr << "failed to alloc gpu memory" << std::endl;
 	}
 
-	float* gpu_Depth = gpuAllocDepthBuffer();
-	if (gpu_Depth == NULL) {
-		std::cerr << "failed to alloc gpu memory" << std::endl;
-	}
+	//float* gpu_Depth = gpuAllocDepthBuffer();
+	//if (gpu_Depth == NULL) {
+	//	std::cerr << "failed to alloc gpu memory" << std::endl;
+	//}
 
 
 	std::vector<Vertex_In> triangleVertices
@@ -134,7 +134,7 @@ int main(int argc, char* args[]) {
 		gpuInit(pCamera);
 
 		SDL_LockSurface(default_screen);
-		render(default_screen, gpu_Screen, gpu_Depth);
+		render(default_screen, gpu_Screen);
 		SDL_UnlockSurface(default_screen);
 
 		SDL_UpdateTexture(sdlTexture, NULL, default_screen->pixels, default_screen->pitch);

@@ -29,7 +29,7 @@ static int g_IndeCount;
 static Triangle* dev_primitives = NULL;
 static int primitiveCount = 0;
 
-static float* g_DepthBuffer;
+static depthInfo* g_DepthBuffer;
 
 #define VERTBLOCKSIZE 256
 #define FRAGBLOCKSIZE 256
@@ -45,6 +45,8 @@ void InitBuffers(const std::vector<Vertex_In>& vertices,const std::vector<int>& 
 	g_VertCount = vertices.size();
 	g_IndeCount = indices.size();
 	primitiveCount = g_VertCount / 3;
+
+	int screenSize = SCREEN_SIZE;
 
 	// Verte in buffer
 	cudaError_t err = cudaFree(g_pVerteInBuffer);
@@ -69,6 +71,20 @@ void InitBuffers(const std::vector<Vertex_In>& vertices,const std::vector<int>& 
 	if (err != cudaSuccess)
 		std::cout << "error with freeing memoery vertexbuffer" << std::endl;
 
+	err = cudaFree(g_DepthBuffer);
+	if (err != cudaSuccess)
+		std::cout << "error with freeing memoery vertexbuffer" << std::endl;
+	err = cudaMalloc(&g_DepthBuffer, screenSize * sizeof(depthInfo));
+	if (err != cudaSuccess)
+		std::cout << "error with freeing memoery vertexbuffer" << std::endl;
+	err = cudaMemset(g_DepthBuffer, 0, screenSize * sizeof(depthInfo));
+	if (err != cudaSuccess)
+		std::cout << "error with freeing memoery vertexbuffer" << std::endl;
+
+	//err = cudaMemcpy(&g_DepthBuffer, depth.data(), SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(float), cudaMemcpyHostToDevice);
+	//if (err != cudaSuccess)
+	//	std::cout << "error with freeing memoery vertexbuffer" << std::endl;
+
 	// Inde buffer
 	cudaFree(g_pIndeBuffer);
 	cudaMalloc(&g_pIndeBuffer, g_IndeCount * sizeof(int));
@@ -90,24 +106,33 @@ uint32_t * gpuAllocScreenBuffer(void)
 	cudaError_t err = cudaMalloc(&gpu_mem, SCREEN_SIZE * 4);
 	if ( err != cudaSuccess ) return NULL;
 
+	checkCUDAError("gpuAllocScreenBuffer");
+
 	return gpu_mem;
 };
 
 float* gpuAllocDepthBuffer(void)
 {
-	float* gpu_mem;
+	float* depth_mem = NULL;
 
-	cudaError_t err = cudaMalloc(&gpu_mem, SCREEN_SIZE * sizeof(float));
+	cudaFree(depth_mem);
+	cudaError_t err = cudaMalloc(&depth_mem, SCREEN_SIZE * sizeof(float));
 	if (err != cudaSuccess) return NULL;
 
-	return gpu_mem;
+	cudaMemset(&depth_mem, 0, SCREEN_SIZE * sizeof(float));
+
+	checkCUDAError("gpuAllocDepthBuffer");
+
+	return depth_mem;
 }
 
-void gpuFree(void* gpu_mem) {
+void gpuFree(void* gpu_mem) 
+{
 	cudaFree(gpu_mem);
 }
 
-int gpuBlit(void* src, void* dst){
+int gpuBlit(void* src, void* dst)
+{
 	cudaError_t err = cudaMemcpy(dst, src, SCREEN_SIZE * 4, cudaMemcpyDeviceToHost);
 	if ( err != cudaSuccess ) 
 		return 1;
@@ -122,20 +147,6 @@ inline float Cross(const glm::vec2 v1, const glm::vec2 v2)
 {
 	return v1.x * v2.y - v1.y * v2.x;
 }
-
-//__host__
-//__device__
-//float min(float left, float right)
-//{
-//	return left < right ? left : right;
-//}
-//
-//__host__
-//__device__
-//float max(float left, float right)
-//{
-//	return left > right ? left : right;
-//}
 
 __global__ 
 void VerteShading(int w, int h, float far, float near, int verteCount, const Vertex_In* verteInBuffer, Vertex_Out* verteOutBuffer, const glm::mat4 worldToView ,const glm::mat4 projectionMatrix)
@@ -207,7 +218,7 @@ glm::vec3 MaxToOne(const glm::vec3 color)
 
 __host__
 __device__
-bool getPixColor(int x, int y, float* pixelDepth, glm::vec3* color, Triangle primitive)
+bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle primitive)
 {
 	float weights[3];
 	float totalTriangleArea = abs(Cross(glm::vec2{ primitive.v[0].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }, glm::vec2{ primitive.v[1].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }));
@@ -241,10 +252,10 @@ bool getPixColor(int x, int y, float* pixelDepth, glm::vec3* color, Triangle pri
 		currentDepth += (1.f / primitive.v[i].screenPosition.z) * weights[i];
 	currentDepth = 1.f / currentDepth;
 
-	if (pixelDepth[0] < currentDepth)
+	if (pixelDepth[0].depth < currentDepth)
 		return false;
-	pixelDepth[0] = currentDepth;
-
+	pixelDepth[0].depth = currentDepth;
+	
 	Vertex_Out endValue;
 
 	for (int i = 0; i < 3; ++i)
@@ -259,7 +270,7 @@ bool getPixColor(int x, int y, float* pixelDepth, glm::vec3* color, Triangle pri
 }
 
 __global__
-void FragmentShading(uint32_t* buf, float* depthBuf, const Triangle* primitives, int primitiveCount)
+void FragmentShading(uint32_t* buf, depthInfo* depthBuf, const Triangle* primitives, int primitiveCount)
 {
 	const int xPix = blockDim.x * blockIdx.x + threadIdx.x;
 	const int yPix = blockDim.y * blockIdx.y + threadIdx.y;
@@ -267,27 +278,32 @@ void FragmentShading(uint32_t* buf, float* depthBuf, const Triangle* primitives,
 	unsigned int pos = SCREEN_WIDTH * yPix + xPix;
 
 	glm::vec3 color{ 0.0f };
-	float depth = 1.0f;
+	//depthInfo depth{ 1.0f };
 	for (int i = 0; i < primitiveCount; ++i)
 	{
 		if (xPix < primitives[i].boundingBox.min.x || xPix > primitives[i].boundingBox.max.x) continue;
 		if (yPix < primitives[i].boundingBox.min.y || yPix > primitives[i].boundingBox.max.y) continue;
 
-		if (!getPixColor(xPix, yPix, &depth, &color, primitives[i]))
+		if (!getPixColor(xPix, yPix, &depthBuf[pos], &color, primitives[i]))
 			continue;
 	}
 
 	buf[pos] = (uint8_t)(color.b * 255.0f) | ((uint8_t)(color.g * 255) << 8) | ((uint8_t)(color.r * 255) << 16) | (uint8_t)(255.0f) << 24;
 }
 
-void ClearDepthBuffer(float* depthBuf)
+__global__
+void ClearDepthBuffer(depthInfo* depthBuf)
 {
-	for(int i = 0; i < SCREEN_SIZE; ++i)
-		depthBuf[i] = 1.f;
+	const int xPix = blockDim.x * blockIdx.x + threadIdx.x;
+	const int yPix = blockDim.y * blockIdx.y + threadIdx.y;
+
+	unsigned int pos = SCREEN_WIDTH * yPix + xPix;
+
+	depthBuf[pos].depth = 1.0f;
 }
 
 // Rasterizer loop
-void gpuRender(uint32_t* buf, float* depthBuf) 
+void gpuRender(uint32_t* buf) 
 {
 	int sideLength2d = 8;
 	dim3 blockSize2d(sideLength2d, sideLength2d);
@@ -305,7 +321,7 @@ void gpuRender(uint32_t* buf, float* depthBuf)
 
 
 	// Clear depth buffer
-	//ClearDepthBuffer(depthBuf);
+	ClearDepthBuffer << <blocksPerGrid, threadsPerBlock >> > (g_DepthBuffer);
 
 	// Verte shading
 	VerteShading<<<vertexGridSize, vertexBlockSize>>>(w, h,g_pCamera->GetFar(), g_pCamera->GetNear(), g_VertCount, g_pVerteInBuffer, g_pVerteOutBuffer, g_pCamera->GetViewMatrix(), g_pCamera->GetProjectionMatrix());
@@ -317,9 +333,8 @@ void gpuRender(uint32_t* buf, float* depthBuf)
 
 
 	// Rasterization
-	FragmentShading<<<blocksPerGrid, threadsPerBlock >>>(buf, depthBuf, dev_primitives, primitiveCount);
+	FragmentShading<<<blocksPerGrid, threadsPerBlock >>>(buf, g_DepthBuffer, dev_primitives, primitiveCount);
 
 
 	checkCUDAError("gpuRender");
-	//buf[pos] = getPixColor(xPix, yPix);
 }
