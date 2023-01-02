@@ -15,17 +15,24 @@
 #include <vector>
 
 class Camera;
+class Texture;
 
 struct Vertex_In
 {
 	glm::vec3 position;
+	glm::vec3 normal;
+	glm::vec3 tangent;
 	glm::vec3 color;
+	glm::vec2 uv;
 };
 
 struct Vertex_Out
 {
 	glm::vec4 screenPosition;
+	glm::vec3 normal;
+	glm::vec3 tangent;
 	glm::vec3 color;
+	glm::vec2 uv;
 };
 
 struct depthInfo
@@ -45,7 +52,7 @@ struct Triangle {
 };
 
 void gpuInit(Camera* pCamera);
-void InitBuffers(const std::vector<Vertex_In>& vertices, const std::vector<int>& indices);
+void InitBuffers(const std::vector<Vertex_In>& vertices, const std::vector<int>& indices, const std::vector<Texture>& textures);
 
 uint32_t* gpuAllocScreenBuffer(void);
 float * gpuAllocDepthBuffer(void) ;

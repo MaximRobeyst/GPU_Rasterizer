@@ -22,6 +22,8 @@
 #include <glm\glm.hpp>
 
 #include "RastizerDebugger.h"
+#include "EOBJParser.h"
+#include "Texture.h"
 
 void render(SDL_Surface* screen, void* cuda_pixels) 
 {
@@ -92,15 +94,12 @@ int main(int argc, char* args[]) {
 		Vertex_In{glm::vec3{0.0f, 1.0f, -7.5f}, glm::vec3{1.0f, 1.0f, 1.0f}},
 		Vertex_In{glm::vec3{-.5f, 0.f, -7.5f}, glm::vec3{1.0f, 1.0f, 1.0f}},
 		Vertex_In{glm::vec3{.5f, 0.f, -7.5f}, glm::vec3{1.0f, 1.0f, 1.0f}},
-
+	
 		// Triangle
 		Vertex_In{glm::vec3{0.0f, 2.0f, -10.0f}, glm::vec3{1.0f, 0.0f, 0.0f}},
 		Vertex_In{glm::vec3{-1.f, 0.f, -10.f}, glm::vec3{0.0f, 1.0f, 0.0f}},
 		Vertex_In{glm::vec3{1.f, 0.f, -10.0f}, glm::vec3{0.0f, 0.0f, 1.0f}}
 	};
-
-	//std::vector<Vertex_Out> projectedVertices{};
-	//projectedVertices.resize(3);
 
 	std::vector<int> indices
 	{
@@ -108,10 +107,19 @@ int main(int argc, char* args[]) {
 		3,	4,	5
 	};
 
-	Camera* pCamera = new Camera{ glm::vec3{ 0,0,0.f }, glm::vec3{ 0,0,-1.0f }, 45.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
+	Elite::ParseOBJ("Resources/tuktuk.obj", triangleVertices, indices);
 
-	InitBuffers(triangleVertices, indices);
+	std::vector<Texture> textures;
+	textures.emplace_back(Texture{ "Resources/tuktuk.png" });
+
+	Camera* pCamera = new Camera{ glm::vec3{ 0,5,64.f }, glm::vec3{ 0,0,-1.0f }, 45.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
+
+	InitBuffers(triangleVertices, indices, textures);
 	float elapsedSec = 0.0f;
+	float fpsCounter = 0.0f;
+
+	//RastizerDebugger rasterizer{ pCamera, triangleVertices, indices };
+	//rasterizer.Render();
 
 	auto t1 = std::chrono::steady_clock::now();
 
@@ -119,6 +127,8 @@ int main(int argc, char* args[]) {
 	{
 		auto t2 = std::chrono::steady_clock::now();
 		float elapsedSec{ std::chrono::duration<float>(t2 - t1).count() };
+		fpsCounter += elapsedSec;
+
 		t1 = t2;
 
 		SDL_Event e;
@@ -142,7 +152,11 @@ int main(int argc, char* args[]) {
 		SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, NULL);
 		SDL_RenderPresent(sdlRenderer);
 
-		std::cout << "FPS: " << 1.0f / elapsedSec << std::endl;
+		if (fpsCounter >= 1.0f)
+		{
+			std::cout << "FPS: " << 1.0f / elapsedSec << std::endl;
+			fpsCounter -= 1.0f;
+		}
 	}
 
   if (window == NULL) {

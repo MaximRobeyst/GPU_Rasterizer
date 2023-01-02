@@ -9,6 +9,8 @@
 #include "const.h"
 #include "checkCUDAError.h"
 
+#include "Texture.h"
+
 #include <vector>
 #include <iostream>
 
@@ -20,6 +22,8 @@ static Camera* g_pCamera;
 static Vertex_In* g_pVerteInBuffer = NULL;
 static Vertex_Out* g_pVerteOutBuffer = NULL;
 static int g_VertCount;
+
+static Texture* g_pTextures = NULL;
 
 // inde buffer
 static int* g_pIndeBuffer;
@@ -40,7 +44,7 @@ void gpuInit(Camera* pCamera)
 	g_pCamera = pCamera;
 }
 
-void InitBuffers(const std::vector<Vertex_In>& vertices,const std::vector<int>& indices)
+void InitBuffers(const std::vector<Vertex_In>& vertices,const std::vector<int>& indices, const std::vector<Texture>& textures)
 {
 	g_VertCount = vertices.size();
 	g_IndeCount = indices.size();
@@ -94,6 +98,20 @@ void InitBuffers(const std::vector<Vertex_In>& vertices,const std::vector<int>& 
 	cudaFree(dev_primitives);
 	cudaMalloc(&dev_primitives, g_VertCount / 3 * sizeof(Triangle));
 	cudaMemset(dev_primitives, 0, g_VertCount / 3 * sizeof(Triangle));
+
+	cudaFree(g_pTextures);
+	cudaMalloc(&g_pTextures, textures.size() * sizeof(Texture));
+	cudaMemcpy(g_pTextures, textures.data(), textures.size() * sizeof(Texture), cudaMemcpyHostToDevice);
+
+	//texture<float, cudaTextureType2D,
+	//	cudaReadModeElementType> texRef;
+	//cudaChannelFormatDesc channelDesc =
+	//	cudaCreateChannelDesc<float>();
+	//size_t offset;
+	//cudaBindTexture2D(&offset, texRef, devPtr, &channelDesc,
+	//	width, height, pitch);
+
+
 
 	checkCUDAError("initBuffers");
 }
@@ -216,9 +234,31 @@ glm::vec3 MaxToOne(const glm::vec3 color)
 	return glm::vec3{ color.r / highestValue, color.g / highestValue, color.b / highestValue };
 }
 
+
 __host__
 __device__
-bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle primitive)
+glm::vec3 TextureSample(Texture* textures, glm::vec2 uv)
+{
+	glm::ivec2 samplePoint{ };
+	samplePoint.x = glm::clamp(static_cast<int>(uv.x * textures->GetTexture()->w), 0, textures->GetTexture()->w);
+	samplePoint.y = glm::clamp(static_cast<int>(uv.y * textures->GetTexture()->h), 0, textures->GetTexture()->h);
+
+	uint8_t r = 0;
+	uint8_t g = 0;
+	uint8_t b = 0;
+
+	uint32_t i = (samplePoint.x) + ((samplePoint.y) * textures->GetTexture()->w);
+
+	//SDL_GetRGB(textures.GetBuffer()[i], textures.GetTexture()->format, &r, &g, &b);
+
+	return glm::vec3{ static_cast<float>(r) / 255.f,static_cast<float>(g) / 255.f,static_cast<float>(b) / 255.f };
+
+	checkCUDAError("TextureSample");
+}
+
+__host__
+__device__
+bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle primitive, Texture* textures)
 {
 	float weights[3];
 	float totalTriangleArea = abs(Cross(glm::vec2{ primitive.v[0].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }, glm::vec2{ primitive.v[1].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }));
@@ -257,20 +297,47 @@ bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle
 	pixelDepth[0].depth = currentDepth;
 	
 	Vertex_Out endValue;
+	float wInterpolated{};
 
 	for (int i = 0; i < 3; ++i)
 	{
+		wInterpolated += (1.0f / primitive.v[i].screenPosition.w) * weights[i];
+
+		endValue.normal += (primitive.v[i].normal) * weights[i];
+		endValue.tangent += (primitive.v[i].tangent) * weights[i];
 		endValue.color += primitive.v[i].color * weights[i];
+		endValue.uv += (primitive.v[i].uv / primitive.v[i].screenPosition.w) * weights[i];
 	}
 
 	endValue.color /= 3;
+	endValue.uv *= (1.0f / wInterpolated);
+	endValue.normal = glm::normalize((endValue.normal / 3.f));
+	endValue.tangent = glm::normalize((endValue.tangent / 3.f));
 
-	color[0] = MaxToOne(endValue.color);
+	glm::vec3 endColor = /*TextureSample(&textures[0], endValue.uv) **/ endValue.color;
+
+	//lighting
+	//glm::vec3 lightDirection{ .577f, -.577f, -.577f };
+	//glm::vec3 lightColor{ 1.f,1.f,1.f };
+	//float intensity{ 2.f };
+
+	// ambient
+	//glm::vec3 ambientColor{ 0.05f, 0.05f, 0.05f };
+	//
+	//auto observedArea = std::max(0.f, (glm::dot(-endValue.normal, lightDirection)));
+	//
+	//glm::vec3 shadedEndColor{};
+
+	//shadedEndColor = lightColor * intensity * endValue.color * observedArea;
+	//shadedEndColor += ambientColor;
+
+	color[0] = MaxToOne(endColor);
 	return true;
 }
 
+
 __global__
-void FragmentShading(uint32_t* buf, depthInfo* depthBuf, const Triangle* primitives, int primitiveCount)
+void FragmentShading(uint32_t* buf, depthInfo* depthBuf, const Triangle* primitives, int primitiveCount, Texture* textures)
 {
 	const int xPix = blockDim.x * blockIdx.x + threadIdx.x;
 	const int yPix = blockDim.y * blockIdx.y + threadIdx.y;
@@ -284,7 +351,7 @@ void FragmentShading(uint32_t* buf, depthInfo* depthBuf, const Triangle* primiti
 		if (xPix < primitives[i].boundingBox.min.x || xPix > primitives[i].boundingBox.max.x) continue;
 		if (yPix < primitives[i].boundingBox.min.y || yPix > primitives[i].boundingBox.max.y) continue;
 
-		if (!getPixColor(xPix, yPix, &depthBuf[pos], &color, primitives[i]))
+		if (!getPixColor(xPix, yPix, &depthBuf[pos], &color, primitives[i], textures))
 			continue;
 	}
 
@@ -333,7 +400,7 @@ void gpuRender(uint32_t* buf)
 
 
 	// Rasterization
-	FragmentShading<<<blocksPerGrid, threadsPerBlock >>>(buf, g_DepthBuffer, dev_primitives, primitiveCount);
+	FragmentShading<<<blocksPerGrid, threadsPerBlock >>>(buf, g_DepthBuffer, dev_primitives, primitiveCount, g_pTextures);
 
 
 	checkCUDAError("gpuRender");

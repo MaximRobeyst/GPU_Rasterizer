@@ -112,7 +112,7 @@ bool RastizerDebugger::getPixColor(int x, int y, float* pixelDepth, glm::vec3* c
 
 		glm::vec2 edge = p1 - p2;
 		glm::vec2 pointToSide = pixel - p2;
-		if (Cross(edge, pointToSide) < 0)
+		if (Cross(edge, pointToSide) > 0)
 			return false;
 
 		weights[i] = Cross(
