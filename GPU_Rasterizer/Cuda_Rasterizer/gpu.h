@@ -17,6 +17,8 @@
 class Camera;
 class Texture;
 
+typedef unsigned char TextureData;
+
 struct Vertex_In
 {
 	glm::vec3 position;
@@ -52,7 +54,7 @@ struct Triangle {
 };
 
 void gpuInit(Camera* pCamera);
-void InitBuffers(const std::vector<Vertex_In>& vertices, const std::vector<int>& indices, const std::vector<Texture>& textures);
+void InitBuffers(const std::vector<Vertex_In>& vertices, const std::vector<int>& indices, const std::vector<Texture*>& textures);
 
 uint32_t* gpuAllocScreenBuffer(void);
 float * gpuAllocDepthBuffer(void) ;

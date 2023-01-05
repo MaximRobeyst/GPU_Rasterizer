@@ -14,6 +14,8 @@
 #include <vector>
 #include <iostream>
 
+typedef unsigned char TextureData;
+
 // https://github.com/bcrusco/CUDA-Rasterizer
 
 static Camera* g_pCamera;
@@ -23,7 +25,7 @@ static Vertex_In* g_pVerteInBuffer = NULL;
 static Vertex_Out* g_pVerteOutBuffer = NULL;
 static int g_VertCount;
 
-static Texture* g_pTextures = NULL;
+static TextureData* g_pTexture = NULL;
 
 // inde buffer
 static int* g_pIndeBuffer;
@@ -35,6 +37,9 @@ static int primitiveCount = 0;
 
 static depthInfo* g_DepthBuffer;
 
+static int g_TextureWidth;
+static int g_TextureHeight;
+
 #define VERTBLOCKSIZE 256
 #define FRAGBLOCKSIZE 256
 
@@ -44,7 +49,7 @@ void gpuInit(Camera* pCamera)
 	g_pCamera = pCamera;
 }
 
-void InitBuffers(const std::vector<Vertex_In>& vertices,const std::vector<int>& indices, const std::vector<Texture>& textures)
+void InitBuffers(const std::vector<Vertex_In>& vertices,const std::vector<int>& indices, const std::vector<Texture*>& textures)
 {
 	g_VertCount = vertices.size();
 	g_IndeCount = indices.size();
@@ -99,9 +104,16 @@ void InitBuffers(const std::vector<Vertex_In>& vertices,const std::vector<int>& 
 	cudaMalloc(&dev_primitives, g_VertCount / 3 * sizeof(Triangle));
 	cudaMemset(dev_primitives, 0, g_VertCount / 3 * sizeof(Triangle));
 
-	cudaFree(g_pTextures);
-	cudaMalloc(&g_pTextures, textures.size() * sizeof(Texture));
-	cudaMemcpy(g_pTextures, textures.data(), textures.size() * sizeof(Texture), cudaMemcpyHostToDevice);
+	auto s = textures[0]->GetSize() * sizeof(TextureData);
+
+	err = cudaFree(g_pTexture);
+	err = cudaMalloc(&g_pTexture, s);
+	err = cudaMemcpy(g_pTexture, &textures[0]->GetData()[0], s, cudaMemcpyHostToDevice);
+
+	g_TextureWidth = textures[0]->GetWidth();
+	g_TextureHeight = textures[0]->GetHeight();
+
+
 
 	//texture<float, cudaTextureType2D,
 	//	cudaReadModeElementType> texRef;
@@ -185,7 +197,10 @@ void VerteShading(int w, int h, float far, float near, int verteCount, const Ver
 		normDeviceCoordinates.z,
 		projectedVertex.w
 	};
+	verteOutBuffer[index].normal = verteInBuffer[index].normal;
+	verteOutBuffer[index].tangent = verteInBuffer[index].tangent;
 	verteOutBuffer[index].color = verteInBuffer[index].color;
+	verteOutBuffer[index].uv = verteInBuffer[index].uv;
 }
 
 __global__
@@ -237,28 +252,31 @@ glm::vec3 MaxToOne(const glm::vec3 color)
 
 __host__
 __device__
-glm::vec3 TextureSample(Texture* textures, glm::vec2 uv)
+glm::vec3 TextureSample(TextureData* textures, glm::vec2 uv, int width, int height)
 {
-	glm::ivec2 samplePoint{ };
-	samplePoint.x = glm::clamp(static_cast<int>(uv.x * textures->GetTexture()->w), 0, textures->GetTexture()->w);
-	samplePoint.y = glm::clamp(static_cast<int>(uv.y * textures->GetTexture()->h), 0, textures->GetTexture()->h);
+	// Not bilinear
+	int u = uv.x * width;
+	int v = uv.y * height;
 
-	uint8_t r = 0;
-	uint8_t g = 0;
-	uint8_t b = 0;
+	// https://stackoverflow.com/questions/35005603/get-color-of-the-texture-at-uv-coordinate
+	int uvIndex = 3 * (u + (v * width));
 
-	uint32_t i = (samplePoint.x) + ((samplePoint.y) * textures->GetTexture()->w);
+	// https://www.opengl.org/discussion_boards/showthread.php/170651-Is-it-possible-to-get-the-pixel-color
+	float r = textures[uvIndex];
+	float g = textures[uvIndex + 1];
+	float b = textures[uvIndex + 2];
 
-	//SDL_GetRGB(textures.GetBuffer()[i], textures.GetTexture()->format, &r, &g, &b);
+	glm::vec3 color = glm::vec3(r, g, b);
+	color /= 255.f;
 
-	return glm::vec3{ static_cast<float>(r) / 255.f,static_cast<float>(g) / 255.f,static_cast<float>(b) / 255.f };
+	return color;
 
-	checkCUDAError("TextureSample");
+	//return glm::vec3{ static_cast<float>(r) / 255.f,static_cast<float>(g) / 255.f,static_cast<float>(b) / 255.f };
 }
 
 __host__
 __device__
-bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle primitive, Texture* textures)
+bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle primitive, TextureData* textures, int textureWidth, int textureHeight)
 {
 	float weights[3];
 	float totalTriangleArea = abs(Cross(glm::vec2{ primitive.v[0].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }, glm::vec2{ primitive.v[1].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }));
@@ -309,35 +327,35 @@ bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle
 		endValue.uv += (primitive.v[i].uv / primitive.v[i].screenPosition.w) * weights[i];
 	}
 
-	endValue.color /= 3;
 	endValue.uv *= (1.0f / wInterpolated);
 	endValue.normal = glm::normalize((endValue.normal / 3.f));
 	endValue.tangent = glm::normalize((endValue.tangent / 3.f));
 
-	glm::vec3 endColor = /*TextureSample(&textures[0], endValue.uv) **/ endValue.color;
+	glm::vec3 endColor = TextureSample(textures, endValue.uv, textureWidth, textureHeight) * endValue.color;
 
 	//lighting
-	//glm::vec3 lightDirection{ .577f, -.577f, -.577f };
-	//glm::vec3 lightColor{ 1.f,1.f,1.f };
-	//float intensity{ 2.f };
+	glm::vec3 lightDirection{ -.577f, .577f, .577f };
+	glm::vec3 lightColor{ 1.f,1.f,1.f };
+	float intensity{ 2.f };
 
 	// ambient
-	//glm::vec3 ambientColor{ 0.05f, 0.05f, 0.05f };
-	//
-	//auto observedArea = std::max(0.f, (glm::dot(-endValue.normal, lightDirection)));
-	//
-	//glm::vec3 shadedEndColor{};
+	glm::vec3 ambientColor{ 0.05f, 0.05f, 0.05f };
+	
+	float observedArea = max(0.0f, (glm::dot(endValue.normal, lightDirection)));
+	
+	glm::vec3 shadedEndColor{};
 
-	//shadedEndColor = lightColor * intensity * endValue.color * observedArea;
-	//shadedEndColor += ambientColor;
+	shadedEndColor = lightColor * intensity * endColor * observedArea;
+	shadedEndColor += ambientColor;
 
-	color[0] = MaxToOne(endColor);
+	color[0] = MaxToOne(shadedEndColor);
 	return true;
+
 }
 
 
 __global__
-void FragmentShading(uint32_t* buf, depthInfo* depthBuf, const Triangle* primitives, int primitiveCount, Texture* textures)
+void FragmentShading(uint32_t* buf, depthInfo* depthBuf, const Triangle* primitives, int primitiveCount, TextureData* textures, int textureWidth, int textureHeight)
 {
 	const int xPix = blockDim.x * blockIdx.x + threadIdx.x;
 	const int yPix = blockDim.y * blockIdx.y + threadIdx.y;
@@ -351,7 +369,7 @@ void FragmentShading(uint32_t* buf, depthInfo* depthBuf, const Triangle* primiti
 		if (xPix < primitives[i].boundingBox.min.x || xPix > primitives[i].boundingBox.max.x) continue;
 		if (yPix < primitives[i].boundingBox.min.y || yPix > primitives[i].boundingBox.max.y) continue;
 
-		if (!getPixColor(xPix, yPix, &depthBuf[pos], &color, primitives[i], textures))
+		if (!getPixColor(xPix, yPix, &depthBuf[pos], &color, primitives[i], textures, textureWidth, textureHeight))
 			continue;
 	}
 
@@ -400,7 +418,7 @@ void gpuRender(uint32_t* buf)
 
 
 	// Rasterization
-	FragmentShading<<<blocksPerGrid, threadsPerBlock >>>(buf, g_DepthBuffer, dev_primitives, primitiveCount, g_pTextures);
+	FragmentShading<<<blocksPerGrid, threadsPerBlock >>>(buf, g_DepthBuffer, dev_primitives, primitiveCount, g_pTexture, g_TextureWidth, g_TextureHeight);
 
 
 	checkCUDAError("gpuRender");

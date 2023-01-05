@@ -1,13 +1,32 @@
 #include "RastizerDebugger.h"
 #include "Camera.h"
+#include "Texture.h"
 
-RastizerDebugger::RastizerDebugger(Camera* pCamera, std::vector<Vertex_In>& vertices, std::vector<int> indices)
+RastizerDebugger::RastizerDebugger(Camera* pCamera, std::vector<Vertex_In>& vertices, std::vector<int> indices, Texture* pTexture)
 	: m_pCamera{pCamera}
 	, m_VerticesIn{vertices}
 	, m_Indices{indices}
 {
 	m_VerticesOut.resize(vertices.size());
 	m_Triangles.resize(vertices.size() / 3);
+
+	m_DepthInfo = new depthInfo[SCREEN_WIDTH * SCREEN_HEIGHT];
+	m_Buffer = new uint32_t[SCREEN_WIDTH * SCREEN_HEIGHT];
+
+	m_pTexture = pTexture;
+}
+
+void RastizerDebugger::ClearDepthBuffer(depthInfo* depthBuf)
+{
+	for (int xPix = 0; xPix < SCREEN_WIDTH; ++xPix)
+	{
+		for (int yPix = 0; yPix < SCREEN_HEIGHT; ++yPix)
+		{
+			unsigned int pos = SCREEN_WIDTH * yPix + xPix;
+
+			depthBuf[pos].depth = 1.0f;
+		}
+	}
 }
 
 void RastizerDebugger::VertexShading(int index, int w, int h, float, float, int verteCount, const Vertex_In* verteInBuffer, Vertex_Out* verteOutBuffer, const glm::mat4 worldToView, const glm::mat4 projectionMatrix)
@@ -26,21 +45,28 @@ void RastizerDebugger::VertexShading(int index, int w, int h, float, float, int 
 		normDeviceCoordinates.z,
 		projectedVertex.w
 	};
+	verteOutBuffer[index].normal = verteInBuffer[index].normal;
+	verteOutBuffer[index].tangent = verteInBuffer[index].tangent;
 	verteOutBuffer[index].color = verteInBuffer[index].color;
+	verteOutBuffer[index].uv = verteInBuffer[index].uv;
 }
 
-void RastizerDebugger::FragmentShade(int xPix, int yPix, Triangle* primitives, int primitiveCount)
+void RastizerDebugger::FragmentShade(int xPix, int yPix, uint32_t* buf, depthInfo* depthBuf, const Triangle* primitives, int primitiveCount, TextureData* textures, int textureWidth, int textureHeight)
 {
 	unsigned int pos = SCREEN_WIDTH * yPix + xPix;
 
 	glm::vec3 color{ 0.0f };
-	float depth = 1.0f;
+	//depthInfo depth{ 1.0f };
 	for (int i = 0; i < primitiveCount; ++i)
 	{
-		if (!getPixColor(xPix, yPix, &depth, &color, primitives[i]))
+		if (xPix < primitives[i].boundingBox.min.x || xPix > primitives[i].boundingBox.max.x) continue;
+		if (yPix < primitives[i].boundingBox.min.y || yPix > primitives[i].boundingBox.max.y) continue;
+
+		if (!getPixColor(xPix, yPix, &depthBuf[pos], &color, primitives[i], textures, textureWidth, textureHeight))
 			continue;
 	}
 
+	buf[pos] = (uint8_t)(color.b * 255.0f) | ((uint8_t)(color.g * 255) << 8) | ((uint8_t)(color.r * 255) << 16) | (uint8_t)(255.0f) << 24;
 }
 
 void RastizerDebugger::AssamblePrimitives(int index, int primitiveCount, const Vertex_Out* vertexBufferOut, Triangle* primitives, const int* bufIdx)
@@ -52,8 +78,21 @@ void RastizerDebugger::AssamblePrimitives(int index, int primitiveCount, const V
 			primitives[index].v[i] = vertexBufferOut[bufIdx[3 * index + i]];
 		}
 
+		primitives[index].boundingBox.min = glm::vec3{
+			std::min(primitives[index].v[0].screenPosition.x, std::min(primitives[index].v[1].screenPosition.x, primitives[index].v[2].screenPosition.x)),
+			std::min(primitives[index].v[0].screenPosition.y, std::min(primitives[index].v[1].screenPosition.y, primitives[index].v[2].screenPosition.y)),
+			std::min(primitives[index].v[0].screenPosition.z, std::min(primitives[index].v[1].screenPosition.z, primitives[index].v[2].screenPosition.z)),
+		};
+
+		primitives[index].boundingBox.max = glm::vec3{
+			std::max(primitives[index].v[0].screenPosition.x, std::max(primitives[index].v[1].screenPosition.x, primitives[index].v[2].screenPosition.x)),
+			std::max(primitives[index].v[0].screenPosition.y, std::max(primitives[index].v[1].screenPosition.y, primitives[index].v[2].screenPosition.y)),
+			std::max(primitives[index].v[0].screenPosition.z, std::max(primitives[index].v[1].screenPosition.z, primitives[index].v[2].screenPosition.z)),
+		};
+
 		//primitives[index].boundingBox = getAABBForTriangle(primitives[index]);
 		primitives[index].visible = true;
+
 	}
 }
 
@@ -65,7 +104,7 @@ void RastizerDebugger::Render()
 
 
 	// Clear depth buffer
-	//ClearDepthBuffer(depthBuf);
+	ClearDepthBuffer(m_DepthInfo);
 
 	// Verte shading
 	for (int i = 0; i < m_VerticesIn.size(); ++i)
@@ -83,19 +122,16 @@ void RastizerDebugger::Render()
 	{
 		for (int y = 0; y < SCREEN_HEIGHT; ++y)
 		{
-			FragmentShade(x,y, m_Triangles.data(), m_Triangles.size());
+			FragmentShade(x,y, m_Buffer, m_DepthInfo, m_Triangles.data(), m_Triangles.size(), m_pTexture->GetData(), m_pTexture->GetWidth(), m_pTexture->GetHeight());
 		}
 	}
 
 }
 
-bool RastizerDebugger::getPixColor(int x, int y, float* pixelDepth, glm::vec3* color, Triangle primitive)
+bool RastizerDebugger::getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle primitive, TextureData* textures, int textureWidth, int textureHeight)
 {
 	float weights[3];
-
-	glm::vec2 screenPositions[3]{ glm::vec2{primitive.v[0].screenPosition}, glm::vec2{primitive.v[1].screenPosition}, glm::vec2{primitive.v[2].screenPosition} };
-
-	float totalTriangleArea = abs(Cross(screenPositions[0] - screenPositions[2], screenPositions[1] - screenPositions[2]));
+	float totalTriangleArea = abs(Cross(glm::vec2{ primitive.v[0].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }, glm::vec2{ primitive.v[1].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }));
 
 	glm::vec2 pixel{ x, y };
 
@@ -112,12 +148,12 @@ bool RastizerDebugger::getPixColor(int x, int y, float* pixelDepth, glm::vec3* c
 
 		glm::vec2 edge = p1 - p2;
 		glm::vec2 pointToSide = pixel - p2;
-		if (Cross(edge, pointToSide) > 0)
+		if (Cross(edge, pointToSide) < 0)
 			return false;
 
 		weights[i] = Cross(
-			pixel - screenPositions[(i + 1) % 3],
-			(screenPositions[(i + 2) % 3] - screenPositions[(i + 1) % 3])
+			pixel - glm::vec2{ primitive.v[(i + 1) % 3].screenPosition },
+			glm::vec2(glm::vec2{ primitive.v[(i + 2) % 3].screenPosition } - glm::vec2{ primitive.v[(i + 1) % 3].screenPosition })
 		) / totalTriangleArea;
 	}
 
@@ -126,20 +162,46 @@ bool RastizerDebugger::getPixColor(int x, int y, float* pixelDepth, glm::vec3* c
 		currentDepth += (1.f / primitive.v[i].screenPosition.z) * weights[i];
 	currentDepth = 1.f / currentDepth;
 
-	if (pixelDepth[0] < currentDepth)
+	if (pixelDepth[0].depth < currentDepth)
 		return false;
-	pixelDepth[0] = currentDepth;
+	pixelDepth[0].depth = currentDepth;
 
 	Vertex_Out endValue;
+	float wInterpolated{};
 
 	for (int i = 0; i < 3; ++i)
 	{
-		endValue.color += primitive.v[i].color;
+		wInterpolated += (1.0f / primitive.v[i].screenPosition.w) * weights[i];
+
+		endValue.normal += (primitive.v[i].normal) * weights[i];
+		endValue.tangent += (primitive.v[i].tangent) * weights[i];
+		endValue.color += primitive.v[i].color * weights[i];
+		endValue.uv += (primitive.v[i].uv / primitive.v[i].screenPosition.w) * weights[i];
 	}
 
-	endValue.color /= 3;
+	//endValue.color /= 3;
+	endValue.uv *= (1.0f / wInterpolated);
+	endValue.normal = glm::normalize((endValue.normal / 3.f));
+	endValue.tangent = glm::normalize((endValue.tangent / 3.f));
 
-	color[0] = MaxToOne(endValue.color);
+	glm::vec3 endColor = TextureSample(textures, endValue.uv, textureWidth, textureHeight) * endValue.color;
+
+	//lighting
+	glm::vec3 lightDirection{ .577f, .577f, .577f };
+	glm::vec3 lightColor{ 1.f,1.f,1.f };
+	float intensity{ 2.f };
+
+	// ambient
+	glm::vec3 ambientColor{ 0.05f, 0.05f, 0.05f };
+
+	float observedArea = std::max(0.0f, (glm::dot(endValue.normal, lightDirection)));
+
+	glm::vec3 shadedEndColor{};
+
+	shadedEndColor = lightColor * intensity * endColor * observedArea;
+	shadedEndColor += ambientColor;
+
+	color[0] = MaxToOne(shadedEndColor);
 	return true;
 }
 

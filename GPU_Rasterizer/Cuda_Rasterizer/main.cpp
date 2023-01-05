@@ -91,34 +91,34 @@ int main(int argc, char* args[]) {
 	std::vector<Vertex_In> triangleVertices
 	{
 		// Triangle 1
-		Vertex_In{glm::vec3{0.0f, 1.0f, -7.5f}, glm::vec3{1.0f, 1.0f, 1.0f}},
-		Vertex_In{glm::vec3{-.5f, 0.f, -7.5f}, glm::vec3{1.0f, 1.0f, 1.0f}},
-		Vertex_In{glm::vec3{.5f, 0.f, -7.5f}, glm::vec3{1.0f, 1.0f, 1.0f}},
-	
-		// Triangle
-		Vertex_In{glm::vec3{0.0f, 2.0f, -10.0f}, glm::vec3{1.0f, 0.0f, 0.0f}},
-		Vertex_In{glm::vec3{-1.f, 0.f, -10.f}, glm::vec3{0.0f, 1.0f, 0.0f}},
-		Vertex_In{glm::vec3{1.f, 0.f, -10.0f}, glm::vec3{0.0f, 0.0f, 1.0f}}
+		Vertex_In{glm::vec3{.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 1.0f, 1.0f}, glm::vec2{1,1}},
+		Vertex_In{glm::vec3{-.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 1.0f, 1.0f}, glm::vec2{0,0}},
+		Vertex_In{glm::vec3{.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 1.0f, 1.0f}, glm::vec2{1,0}},
+
+		// Triangle 2
+		Vertex_In{glm::vec3{.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 1.0f, 1.0f}, glm::vec2{1,1}},
+		Vertex_In{glm::vec3{-.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 1.0f, 1.0f}, glm::vec2{0,0}},
+		Vertex_In{glm::vec3{-.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 1.0f, 1.0f}, glm::vec2{0,1}}
 	};
 
 	std::vector<int> indices
 	{
 		0,	1,	2,
-		3,	4,	5
+		5, 4, 3,
 	};
 
 	Elite::ParseOBJ("Resources/tuktuk.obj", triangleVertices, indices);
 
-	std::vector<Texture> textures;
-	textures.emplace_back(Texture{ "Resources/tuktuk.png" });
+	std::vector<Texture*> textures;
+	textures.emplace_back(new Texture{ "Resources/tuktuk.jpg" });
 
-	Camera* pCamera = new Camera{ glm::vec3{ 0,5,64.f }, glm::vec3{ 0,0,-1.0f }, 45.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
+	Camera* pCamera = new Camera{ glm::vec3{ 0,0,5.f }, glm::vec3{ 0,0,-1.0f }, 45.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
 
 	InitBuffers(triangleVertices, indices, textures);
 	float elapsedSec = 0.0f;
 	float fpsCounter = 0.0f;
 
-	//RastizerDebugger rasterizer{ pCamera, triangleVertices, indices };
+	//RastizerDebugger rasterizer{ pCamera, triangleVertices, indices , textures[0]};
 	//rasterizer.Render();
 
 	auto t1 = std::chrono::steady_clock::now();
@@ -164,6 +164,12 @@ int main(int argc, char* args[]) {
     return 1;
   }
 	
+  for (auto texture : textures)
+  {
+	  delete texture;
+  }
+  textures.clear();
+
   delete pCamera;
 
   	gpuFree(gpu_Screen);
