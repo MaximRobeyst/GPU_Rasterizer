@@ -73,7 +73,6 @@ int main(int argc, char* args[]) {
         SDL_Log("SDL_CreateRGBSurface() failed: %s", SDL_GetError());
         exit(1);
 	}
-
     SDL_Renderer* sdlRenderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 
 	SDL_Texture *sdlTexture = SDL_CreateTexture(sdlRenderer,
@@ -140,6 +139,9 @@ int main(int argc, char* args[]) {
 
 	auto t1 = std::chrono::steady_clock::now();
 
+	float t = 0.0f;
+	bool paused = false;
+
 	while (1)
 	{
 		auto t2 = std::chrono::steady_clock::now();
@@ -155,15 +157,28 @@ int main(int argc, char* args[]) {
 			{
 		        break;
 		    }
+			if (e.type == SDL_KEYDOWN)
+			{
+				if (e.key.keysym.sym == SDLK_p)
+					paused = !paused;
+			}
 		}
 
 		pCamera->Update(elapsedSec);
+		for (auto mesh : pMeshes)
+		{
+			if (paused) continue;
+			mesh->GetTransform()->SetRotation(0, t, 0);
+			t += 1.0f * elapsedSec;
+		}
+
 		gpuInit(pCamera);
 
 		SDL_LockSurface(default_screen);
 		ClearDepthBuffer();
 
 		render(default_screen, gpu_Screen, pMeshes);
+		ClearScreen(gpu_Screen);
 		SDL_UnlockSurface(default_screen);
 
 		SDL_UpdateTexture(sdlTexture, NULL, default_screen->pixels, default_screen->pitch);

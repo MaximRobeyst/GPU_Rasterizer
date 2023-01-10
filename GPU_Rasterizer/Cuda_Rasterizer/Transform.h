@@ -12,6 +12,7 @@ public:
 	glm::vec3 GetPosition() const;
 
 	void SetPosition(glm::vec3 position);
+	void SetRotation(float x, float y, float z);
 	void SetRotation(float angle, glm::vec3 axis);
 
 	glm::mat4 GetWorldTransform();

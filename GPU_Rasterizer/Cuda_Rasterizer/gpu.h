@@ -57,6 +57,7 @@ void gpuInit(Camera* pCamera);
 void InitBuffers(Vertex_In* vertices, int vertCount, const std::vector<unsigned int>& indices, const std::vector<Texture*>& textures, glm::mat4& worldMatrix);
 
 void ClearDepthBuffer();
+void ClearScreen(void* src);
 
 uint32_t* gpuAllocScreenBuffer(void);
 float * gpuAllocDepthBuffer(void) ;

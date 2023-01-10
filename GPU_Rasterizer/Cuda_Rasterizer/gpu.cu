@@ -40,7 +40,7 @@ static depthInfo* g_DepthBuffer;
 static int g_TextureWidth;
 static int g_TextureHeight;
 
-static glm::mat4* g_WorldMatrix;
+static glm::mat4 g_WorldMatrix;
 
 #define VERTBLOCKSIZE 256
 #define FRAGBLOCKSIZE 256
@@ -58,6 +58,8 @@ void InitBuffers(Vertex_In* vertices, int vertCount,const std::vector<unsigned i
 	g_VertCount = vertCount;
 	g_IndeCount = indices.size();
 	primitiveCount = g_VertCount / 3;
+
+	g_WorldMatrix = worldMatrix;
 
 	int screenSize = SCREEN_SIZE;
 
@@ -89,18 +91,6 @@ void InitBuffers(Vertex_In* vertices, int vertCount,const std::vector<unsigned i
 	if (err != cudaSuccess)
 		std::cout << "error with copying memory g_pVerteOutBuffer" << std::endl;
 
-	err = cudaFree(g_DepthBuffer);
-	if (err != cudaSuccess)
-		std::cout << "error with freeing memory g_DepthBuffer" << std::endl;
-
-	err = cudaMalloc(&g_DepthBuffer, screenSize * sizeof(depthInfo));
-	if (err != cudaSuccess)
-		std::cout << "error allocating memory for g_DepthBuffer" << std::endl;
-
-	err = cudaMemset(g_DepthBuffer, 0, screenSize * sizeof(depthInfo));
-	if (err != cudaSuccess)
-		std::cout << "error with copying memory g_DepthBuffer" << std::endl;
-
 	// Inde buffer
 	cudaFree(g_pIndeBuffer);
 	cudaMalloc(&g_pIndeBuffer, g_IndeCount * sizeof(unsigned int));
@@ -120,15 +110,10 @@ void InitBuffers(Vertex_In* vertices, int vertCount,const std::vector<unsigned i
 	g_TextureWidth = textures[0]->GetWidth();
 	g_TextureHeight = textures[0]->GetHeight();
 
-	err = cudaFree(g_WorldMatrix);
-	err = cudaMalloc(&g_WorldMatrix, sizeof(glm::mat4));
-	err = cudaMemcpy(g_WorldMatrix, &worldMatrix[0][0], sizeof(glm::mat4), cudaMemcpyHostToDevice);
-
 
 
 	checkCUDAError("initBuffers");
 }
-
 
 uint32_t * gpuAllocScreenBuffer(void)
 {
@@ -160,6 +145,12 @@ float* gpuAllocDepthBuffer(void)
 void gpuFree(void* gpu_mem) 
 {
 	cudaFree(gpu_mem);
+}
+
+
+void ClearScreen(void* src)
+{
+	cudaMemset(src, 0, SCREEN_SIZE * 4);
 }
 
 int gpuBlit(void* src, void* dst)
@@ -198,8 +189,8 @@ void VerteShading(int w, int h, float far, float near, int verteCount, const Ver
 		normDeviceCoordinates.z,
 		projectedVertex.w
 	};
-	verteOutBuffer[index].normal = verteInBuffer[index].normal;
-	verteOutBuffer[index].tangent = verteInBuffer[index].tangent;
+	verteOutBuffer[index].normal = glm::normalize(meshWorldMatrix * glm::vec4{ verteInBuffer[index].normal, 0.0f });
+	verteOutBuffer[index].tangent = glm::normalize(meshWorldMatrix * glm::vec4{ verteInBuffer[index].tangent, 0.0f });
 	verteOutBuffer[index].color = verteInBuffer[index].color;
 	verteOutBuffer[index].uv = verteInBuffer[index].uv;
 }
@@ -360,6 +351,24 @@ bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle
 
 }
 
+__device__
+glm::vec3 ConvertUint32ToRGB(uint32_t pixel)
+{
+	constexpr std::uint32_t redBits{ 0x00FF0000 };
+	constexpr std::uint32_t greenBits{ 0x0000FF00 };
+	constexpr std::uint32_t blueBits{ 0x000000FF };
+	constexpr std::uint32_t alphaBits{ 0xFF000000 };
+
+	// use Bitwise AND to isolate red pixels,
+	// then right shift the value into the lower 8 bits
+	std::uint8_t red{ static_cast<std::uint8_t>((pixel & redBits) >> 16) };
+	std::uint8_t green{ static_cast<std::uint8_t>((pixel & greenBits) >> 8) };
+	std::uint8_t blue{ static_cast<std::uint8_t>((pixel & blueBits)) };
+	std::uint8_t alpha{ static_cast<std::uint8_t>((pixel & alphaBits) >> 24) };
+
+
+	return glm::vec3{ static_cast<float>(red) / 255.f, static_cast<float>(green) / 255.f, static_cast<float>(blue) / 255.f };
+}
 
 __global__
 void FragmentShading(uint32_t* buf, depthInfo* depthBuf, const Triangle* primitives, int primitiveCount, TextureData* textures, int textureWidth, int textureHeight)
@@ -369,7 +378,7 @@ void FragmentShading(uint32_t* buf, depthInfo* depthBuf, const Triangle* primiti
 
 	unsigned int pos = SCREEN_WIDTH * yPix + xPix;
 
-	glm::vec3 color{ 0.0f };
+	glm::vec3 color = ConvertUint32ToRGB(buf[pos]);
 	//depthInfo depth{ 1.0f };
 	for (int i = 0; i < primitiveCount; ++i)
 	{
@@ -395,6 +404,22 @@ void ClearDepthBufferGPU(depthInfo* depthBuf)
 }
 void ClearDepthBuffer()
 {
+	if (g_DepthBuffer == NULL)
+	{
+		cudaError_t err = cudaFree(g_DepthBuffer);
+		if (err != cudaSuccess)
+			std::cout << "error with freeing memory g_DepthBuffer" << std::endl;
+
+		err = cudaMalloc(&g_DepthBuffer, SCREEN_SIZE * sizeof(depthInfo));
+		if (err != cudaSuccess)
+			std::cout << "error allocating memory for g_DepthBuffer" << std::endl;
+
+		err = cudaMemset(g_DepthBuffer, 0, SCREEN_SIZE * sizeof(depthInfo));
+		if (err != cudaSuccess)
+			std::cout << "error with copying memory g_DepthBuffer" << std::endl;
+	}
+
+
 	int sideLength2d = 8;
 	dim3 blockSize2d(sideLength2d, sideLength2d);
 	dim3 blockCount2d((SCREEN_WIDTH + blockSize2d.x - 1) / blockSize2d.x,
@@ -432,7 +457,7 @@ void gpuRender(uint32_t* buf)
 
 
 	// Verte shading
-	VerteShading<<<vertexGridSize, vertexBlockSize>>>(w, h,g_pCamera->GetFar(), g_pCamera->GetNear(), g_VertCount, g_pVerteInBuffer, g_pVerteOutBuffer, g_pCamera->GetViewMatrix(), g_pCamera->GetProjectionMatrix(), *g_WorldMatrix);
+	VerteShading<<<vertexGridSize, vertexBlockSize>>>(w, h,g_pCamera->GetFar(), g_pCamera->GetNear(), g_VertCount, g_pVerteInBuffer, g_pVerteOutBuffer, g_pCamera->GetViewMatrix(), g_pCamera->GetProjectionMatrix(), g_WorldMatrix);
 
 	// Primitive Assembly
 	AssemblePrimitives<<<vertexGridSize, vertexBlockSize>>>(primitiveCount, g_pVerteOutBuffer, dev_primitives, g_pIndeBuffer);

@@ -65,9 +65,7 @@
 xcopy $(SolutionDir)3rdParty\SDL2_image\lib\$(PlatformTarget)\*.dll $(OutputPath) /R /Y
 xcopy $(SolutionDir)3rdParty\SDL2_ttf\lib\$(PlatformTarget)\*.dll $(OutputPath) /R /Y</Command>
     </PostBuildEvent>
-    <CudaLink>
-      <AdditionalOptions>cuda-memcheck %(AdditionalOptions)</AdditionalOptions>
-    </CudaLink>
+    <CudaLink />
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
