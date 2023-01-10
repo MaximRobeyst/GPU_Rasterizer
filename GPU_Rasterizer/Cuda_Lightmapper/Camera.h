@@ -21,8 +21,12 @@ public:
 	void ProcessKeyboard(char key, float deltaTime);
 	void ProcessMouseMovement(float xoffset, float yoffset, float deltaTime,GLboolean constrainPitch = true);
 	void ProcessMouseScroll(float yOffset);
+
+	static Camera* GetMainCamera();
 private:
 	void UpdateCameraVectors();
+
+	static Camera* m_pMainCamera;
 
 	glm::mat4 m_Projection;
 	Transform* m_pTransform;
@@ -31,8 +35,8 @@ private:
 	glm::vec3 m_Up{0,1,0};
 	glm::vec3 m_Right{1,0,0};
 
-	float m_Yaw;
-	float m_Pitch;
+	float m_Yaw{};
+	float m_Pitch{};
 
 	float m_Zoom = 45.0f;
 	float m_Aspect;

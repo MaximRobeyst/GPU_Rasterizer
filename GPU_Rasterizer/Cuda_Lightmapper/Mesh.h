@@ -21,6 +21,8 @@ public:
 	Mesh(std::vector<Vertex>& vertices, std::vector<unsigned int>& indices);
 	~Mesh();
 
+	Mesh(const Mesh& mesh);
+
 	void Initialize();
 	void Draw(Camera* pCamera);
 
@@ -37,7 +39,12 @@ public:
 	void ReadyTextures();
 
 	static void SetLinesRender(bool lines);
-	static bool GetLinesRender() ;
+	static bool GetLinesRender();
+
+	const std::vector<Vertex>& GetVertices() const;
+	const std::vector<unsigned int>& GetIndices() const;
+
+	static Mesh* CreateCube(float width, float height, float depth);
 
 private:
 	std::vector<Vertex> m_Vertices;

@@ -36,6 +36,12 @@ Mesh::~Mesh()
 	m_pSubmeshes.clear();
 }
 
+Mesh::Mesh(const Mesh& mesh)
+	: m_Vertices{mesh.m_Vertices}
+	, m_Indices{mesh.m_Indices}
+{
+}
+
 void Mesh::Initialize()
 {
 	glGenVertexArrays(1, &m_VAO);
@@ -83,7 +89,7 @@ void Mesh::Draw(Camera* pCamera)
 
 	m_pMaterial->UseProgram();
 
-	m_pMaterial->SetMat4("model", glm::mat4(1.f));
+	m_pMaterial->SetMat4("model", m_pTransform->GetWorldTransform());
 	m_pMaterial->SetMat4("view", pCamera->GetViewMatrix());
 	m_pMaterial->SetMat4("projection", pCamera->GetProjectionMatrix());
 
@@ -154,4 +160,111 @@ void Mesh::SetLinesRender(bool lines)
 bool Mesh::GetLinesRender()
 {
 	return m_Lines;
+}
+
+const std::vector<Vertex>& Mesh::GetVertices() const
+{
+	return m_Vertices;
+}
+
+const std::vector<unsigned int>& Mesh::GetIndices() const
+{
+	return m_Indices;
+}
+
+Mesh* Mesh::CreateCube(float width, float height, float depth)
+{
+	std::vector<Vertex> vertices;
+	std::vector<unsigned int> indices;
+
+	float halfWidth = width / 2.0f;
+	float halfHeight = height / 2.0f;
+	float halfDepth = depth / 2.0f;
+
+	// Create Top Face
+	indices.emplace_back(vertices.size() + 0);
+	indices.emplace_back(vertices.size() + 1);
+	indices.emplace_back(vertices.size() + 3);
+
+	indices.emplace_back(vertices.size() + 1);
+	indices.emplace_back(vertices.size() + 2);
+	indices.emplace_back(vertices.size() + 3);
+
+	vertices.emplace_back(Vertex{ glm::vec3{-halfWidth,	halfHeight,	-halfDepth},	glm::normalize(glm::vec3{0,1,0}) ,glm::vec2{1.0f, 1.f} });
+	vertices.emplace_back(Vertex{ glm::vec3{halfWidth,	halfHeight,	-halfDepth},	glm::normalize(glm::vec3{0,1,0}) ,glm::vec2{1.0f, 0.f} });
+	vertices.emplace_back(Vertex{ glm::vec3{halfWidth,	halfHeight,	halfDepth},	glm::normalize(glm::vec3{0,1,0}) ,glm::vec2{0.0f, 0.f} });
+	vertices.emplace_back(Vertex{ glm::vec3{-halfWidth,	halfHeight,	halfDepth},	glm::normalize(glm::vec3{0,1,0}) ,glm::vec2{0.0f, 1.f} });
+
+	// Create Bottom face
+	indices.emplace_back(vertices.size() + 0);
+	indices.emplace_back(vertices.size() + 1);
+	indices.emplace_back(vertices.size() + 3);
+
+	indices.emplace_back(vertices.size() + 1);
+	indices.emplace_back(vertices.size() + 2);
+	indices.emplace_back(vertices.size() + 3);
+
+	vertices.emplace_back(Vertex{ glm::vec3{-halfWidth,	-halfHeight,	-halfDepth},	glm::normalize(glm::vec3{0,-1,0}) ,glm::vec2{1.0f, 1.f} });
+	vertices.emplace_back(Vertex{ glm::vec3{halfWidth,	-halfHeight,	-halfDepth},	glm::normalize(glm::vec3{0,-1,0}) ,glm::vec2{1.0f, 0.f} });
+	vertices.emplace_back(Vertex{ glm::vec3{halfWidth,	-halfHeight,	halfDepth},	glm::normalize(glm::vec3{0,-1,0}) ,glm::vec2{0.0f, 0.f} });
+	vertices.emplace_back(Vertex{ glm::vec3{-halfWidth,	-halfHeight,	halfDepth},	glm::normalize(glm::vec3{0,-1,0}) ,glm::vec2{0.0f, 1.f} });
+
+	// Left
+	indices.emplace_back(vertices.size() + 0);
+	indices.emplace_back(vertices.size() + 1);
+	indices.emplace_back(vertices.size() + 3);
+
+	indices.emplace_back(vertices.size() + 1);
+	indices.emplace_back(vertices.size() + 2);
+	indices.emplace_back(vertices.size() + 3);
+
+	vertices.emplace_back(Vertex{ glm::vec3{-halfWidth,	halfHeight,	halfDepth},	glm::normalize(glm::vec3{-1,0,0}) ,		glm::vec2{1.0f, 1.f} });
+	vertices.emplace_back(Vertex{ glm::vec3{-halfWidth,	-halfHeight,	halfDepth},	glm::normalize(glm::vec3{-1,0,0}) ,	glm::vec2{1.0f, 0.f} });
+	vertices.emplace_back(Vertex{ glm::vec3{-halfWidth,	-halfHeight,	-halfDepth},	glm::normalize(glm::vec3{-1,0,0}) ,	glm::vec2{0.0f, 0.f} });
+	vertices.emplace_back(Vertex{ glm::vec3{-halfWidth,	halfHeight,	-halfDepth},	glm::normalize(glm::vec3{-1,0,0}) ,		glm::vec2{0.0f, 1.f} });
+
+	// Right
+	indices.emplace_back(vertices.size() + 0);
+	indices.emplace_back(vertices.size() + 1);
+	indices.emplace_back(vertices.size() + 3);
+
+	indices.emplace_back(vertices.size() + 1);
+	indices.emplace_back(vertices.size() + 2);
+	indices.emplace_back(vertices.size() + 3);
+
+	vertices.emplace_back(Vertex{ glm::vec3{halfWidth,	halfHeight,	halfDepth},	glm::normalize(glm::vec3{1,0,0}) ,	 glm::vec2{1.0f, 1.f} });
+	vertices.emplace_back(Vertex{ glm::vec3{halfWidth,	-halfHeight,	halfDepth},	glm::normalize(glm::vec3{1,0,0}) ,glm::vec2{1.0f, 0.f} });
+	vertices.emplace_back(Vertex{ glm::vec3{halfWidth,	-halfHeight,	-halfDepth},	glm::normalize(glm::vec3{1,0,0}) ,glm::vec2{0.0f, 0.f} });
+	vertices.emplace_back(Vertex{ glm::vec3{halfWidth,	halfHeight,	-halfDepth},	glm::normalize(glm::vec3{1,0,0})		,glm::vec2{0.0f, 1.f} });
+
+
+	// Front
+	indices.emplace_back(vertices.size() + 0);
+	indices.emplace_back(vertices.size() + 1);
+	indices.emplace_back(vertices.size() + 3);
+
+	indices.emplace_back(vertices.size() + 1);
+	indices.emplace_back(vertices.size() + 2);
+	indices.emplace_back(vertices.size() + 3);
+
+	vertices.emplace_back(Vertex{ glm::vec3{halfWidth,	halfHeight,	halfDepth}, glm::normalize(glm::vec3{0,0,1})	,	 glm::vec2{1.0f, 1.f} });
+	vertices.emplace_back(Vertex{ glm::vec3{halfWidth,	-halfHeight,	halfDepth}, glm::normalize(glm::vec3{0,0,1})	,glm::vec2{1.0f, 0.f} });
+	vertices.emplace_back(Vertex{ glm::vec3{-halfWidth,	-halfHeight,	halfDepth}, glm::normalize(glm::vec3{0,0,1})	,glm::vec2{0.0f, 0.f} });
+	vertices.emplace_back(Vertex{ glm::vec3{-halfWidth,	halfHeight,	halfDepth}, glm::normalize(glm::vec3{0,0,1})	,	 glm::vec2{0.0f, 1.f} });
+
+	// Back
+	indices.emplace_back(vertices.size() + 0);
+	indices.emplace_back(vertices.size() + 1);
+	indices.emplace_back(vertices.size() + 3);
+
+	indices.emplace_back(vertices.size() + 1);
+	indices.emplace_back(vertices.size() + 2);
+	indices.emplace_back(vertices.size() + 3);
+
+	vertices.emplace_back(Vertex{ glm::vec3{halfWidth,	halfHeight,	-halfDepth},	glm::normalize(glm::vec3{0,0,-1}) ,		glm::vec2{1.0f, 1.f} });
+	vertices.emplace_back(Vertex{ glm::vec3{halfWidth,	-halfHeight,	-halfDepth},	glm::normalize(glm::vec3{0,0,-1}) ,	glm::vec2{1.0f, 0.f} });
+	vertices.emplace_back(Vertex{ glm::vec3{-halfWidth,	-halfHeight,	-halfDepth},	glm::normalize(glm::vec3{0,0,-1}) ,	glm::vec2{0.0f, 0.f} });
+	vertices.emplace_back(Vertex{ glm::vec3{-halfWidth,	halfHeight,	-halfDepth},	glm::normalize(glm::vec3{0,0,-1}) ,		glm::vec2{0.0f, 1.f} });
+
+	return new Mesh(vertices, indices);
 }

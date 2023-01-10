@@ -1,12 +1,15 @@
 #include "Camera.h"
 #include "Transform.h"
 
+Camera* Camera::m_pMainCamera = nullptr;
+
 Camera::Camera(float fovAngle, float aspectRatio, float nearClipping, float farClipping, Transform* pTransform)
 	: m_Projection{glm::perspective(glm::radians(fovAngle / 2.f),aspectRatio, nearClipping, farClipping)}
 	, m_pTransform{pTransform}
 	, m_Zoom{fovAngle / 2.f}
 	, m_Aspect{aspectRatio}
 {
+	if (m_pMainCamera == nullptr) m_pMainCamera = this;
 }
 
 Camera::~Camera()
@@ -92,6 +95,11 @@ void Camera::ProcessMouseScroll(float yOffset)
 		m_Zoom = 45.0f;
 
 	RegenerateProjectionMatrix(m_Zoom, m_Aspect);
+}
+
+Camera* Camera::GetMainCamera()
+{
+	return m_pMainCamera;
 }
 
 void Camera::UpdateCameraVectors()
