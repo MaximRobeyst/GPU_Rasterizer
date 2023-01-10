@@ -1,0 +1,71 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CudaCompile Include="gpu.cu">
+      <Filter>Cuda_Code</Filter>
+    </CudaCompile>
+    <CudaCompile Include="Camera.cu">
+      <Filter>Cuda_Code</Filter>
+    </CudaCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="Mesh.cpp">
+      <Filter>Helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="Texture.cpp">
+      <Filter>Helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="Transform.cpp">
+      <Filter>Helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="RastizerDebugger.cpp">
+      <Filter>Helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="Material.cpp">
+      <Filter>Helpers</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="const.h" />
+    <ClInclude Include="stb_image.h" />
+    <ClInclude Include="Mesh.h">
+      <Filter>Helpers</Filter>
+    </ClInclude>
+    <ClInclude Include="Transform.h">
+      <Filter>Helpers</Filter>
+    </ClInclude>
+    <ClInclude Include="Texture.h">
+      <Filter>Helpers</Filter>
+    </ClInclude>
+    <ClInclude Include="gpu.h">
+      <Filter>Cuda_Code</Filter>
+    </ClInclude>
+    <ClInclude Include="checkCUDAError.h">
+      <Filter>Cuda_Code</Filter>
+    </ClInclude>
+    <ClInclude Include="Camera.h">
+      <Filter>Cuda_Code</Filter>
+    </ClInclude>
+    <ClInclude Include="EOBJParser.h">
+      <Filter>Helpers</Filter>
+    </ClInclude>
+    <ClInclude Include="RastizerDebugger.h">
+      <Filter>Helpers</Filter>
+    </ClInclude>
+    <ClInclude Include="Material.h">
+      <Filter>Helpers</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="cpp.hint" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Cuda_Code">
+      <UniqueIdentifier>{7cf2ed3a-4b37-45ca-8339-c39ec584b960}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Helpers">
+      <UniqueIdentifier>{32dc35f6-d169-4433-87a6-357098aaf85f}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

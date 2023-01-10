@@ -54,7 +54,9 @@ struct Triangle {
 };
 
 void gpuInit(Camera* pCamera);
-void InitBuffers(const std::vector<Vertex_In>& vertices, const std::vector<int>& indices, const std::vector<Texture*>& textures);
+void InitBuffers(Vertex_In* vertices, int vertCount, const std::vector<unsigned int>& indices, const std::vector<Texture*>& textures, glm::mat4& worldMatrix);
+
+void ClearDepthBuffer();
 
 uint32_t* gpuAllocScreenBuffer(void);
 float * gpuAllocDepthBuffer(void) ;

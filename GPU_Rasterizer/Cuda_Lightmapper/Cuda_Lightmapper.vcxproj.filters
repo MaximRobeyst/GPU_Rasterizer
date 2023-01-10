@@ -39,6 +39,7 @@
     <ClCompile Include="LightManager.cpp">
       <Filter>Manager</Filter>
     </ClCompile>
+    <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Mesh.h">

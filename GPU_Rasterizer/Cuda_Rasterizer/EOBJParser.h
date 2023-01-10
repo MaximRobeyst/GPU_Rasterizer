@@ -28,7 +28,7 @@ namespace Elite
 	}
 
 	//Just parses vertices and indices
-	static bool ParseOBJ(const std::string& filename, std::vector<Vertex_In>& vertices, std::vector<int>& indices)
+	static bool ParseOBJ(const std::string& filename, std::vector<Vertex_In>& vertices, std::vector<unsigned int>& indices)
 	{
 		std::ifstream file(filename);
 		if (!file)

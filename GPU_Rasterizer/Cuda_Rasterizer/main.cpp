@@ -24,10 +24,17 @@
 #include "RastizerDebugger.h"
 #include "EOBJParser.h"
 #include "Texture.h"
+#include "stb_image.h"
+#include "Mesh.h"
+#include "Transform.h"
 
-void render(SDL_Surface* screen, void* cuda_pixels) 
+void render(SDL_Surface* screen, void* cuda_pixels, const std::vector<Mesh*>& pMeshes) 
 {
-	gpuRender((uint32_t*)cuda_pixels);
+	for (int i = 0; i < pMeshes.size(); ++i)
+	{
+		InitBuffers(pMeshes[i]->GetVertexPointer(), pMeshes[i]->GetVertices().size(), pMeshes[i]->GetIndices(), pMeshes[i]->GetTextures(), pMeshes[i]->GetTransform()->GetWorldTransform());
+		gpuRender((uint32_t*)cuda_pixels);
+	}
 	if ( gpuBlit(cuda_pixels, screen->pixels) != 0 ) 
 	{
 		cudaError_t err{ cudaGetLastError() };
@@ -41,6 +48,8 @@ int main(int argc, char* args[]) {
 
 	uint32_t time_step = 1000. / 60. ;
 	uint32_t next_time_step = SDL_GetTicks();
+
+	//stbi_set_flip_vertically_on_load(true);
 
 	if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
 		std::cerr << "could not initialize sdl2: " << SDL_GetError() << std::endl;
@@ -101,7 +110,7 @@ int main(int argc, char* args[]) {
 		Vertex_In{glm::vec3{-.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 1.0f, 1.0f}, glm::vec2{0,1}}
 	};
 
-	std::vector<int> indices
+	std::vector<unsigned int> indices
 	{
 		0,	1,	2,
 		5, 4, 3,
@@ -109,12 +118,20 @@ int main(int argc, char* args[]) {
 
 	Elite::ParseOBJ("Resources/tuktuk.obj", triangleVertices, indices);
 
-	std::vector<Texture*> textures;
-	textures.emplace_back(new Texture{ "Resources/tuktuk.jpg" });
+	std::vector<Mesh*> pMeshes{};
+	pMeshes.emplace_back(new Mesh( triangleVertices, indices ));
+	pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/tuktuk.jpg" });
+	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{-10.0f,0,0} });
+
+
+	Elite::ParseOBJ("Resources/vehicle.obj", triangleVertices, indices);
+	pMeshes.emplace_back(new Mesh(triangleVertices, indices));
+	pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/vehicle_diffuse.jpg" });
+	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{10.0f,0,0} });
 
 	Camera* pCamera = new Camera{ glm::vec3{ 0,0,5.f }, glm::vec3{ 0,0,-1.0f }, 45.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
 
-	InitBuffers(triangleVertices, indices, textures);
+	//InitBuffers(triangleVertices, indices, textures);
 	float elapsedSec = 0.0f;
 	float fpsCounter = 0.0f;
 
@@ -144,7 +161,9 @@ int main(int argc, char* args[]) {
 		gpuInit(pCamera);
 
 		SDL_LockSurface(default_screen);
-		render(default_screen, gpu_Screen);
+		ClearDepthBuffer();
+
+		render(default_screen, gpu_Screen, pMeshes);
 		SDL_UnlockSurface(default_screen);
 
 		SDL_UpdateTexture(sdlTexture, NULL, default_screen->pixels, default_screen->pitch);
@@ -163,12 +182,12 @@ int main(int argc, char* args[]) {
 	  std::cerr << "could not create window: " << SDL_GetError() << std::endl;
     return 1;
   }
-	
-  for (auto texture : textures)
+
+  for (auto mesh : pMeshes)
   {
-	  delete texture;
+	  delete mesh;
   }
-  textures.clear();
+  pMeshes.clear();
 
   delete pCamera;
 

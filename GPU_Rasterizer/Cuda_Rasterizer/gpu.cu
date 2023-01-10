@@ -40,6 +40,8 @@ static depthInfo* g_DepthBuffer;
 static int g_TextureWidth;
 static int g_TextureHeight;
 
+static glm::mat4* g_WorldMatrix;
+
 #define VERTBLOCKSIZE 256
 #define FRAGBLOCKSIZE 256
 
@@ -49,9 +51,11 @@ void gpuInit(Camera* pCamera)
 	g_pCamera = pCamera;
 }
 
-void InitBuffers(const std::vector<Vertex_In>& vertices,const std::vector<int>& indices, const std::vector<Texture*>& textures)
+void InitBuffers(Vertex_In* vertices, int vertCount,const std::vector<unsigned int>& indices, const std::vector<Texture*>& textures, glm::mat4& worldMatrix)
 {
-	g_VertCount = vertices.size();
+	//cudaDeviceSynchronize();
+
+	g_VertCount = vertCount;
 	g_IndeCount = indices.size();
 	primitiveCount = g_VertCount / 3;
 
@@ -60,44 +64,47 @@ void InitBuffers(const std::vector<Vertex_In>& vertices,const std::vector<int>& 
 	// Verte in buffer
 	cudaError_t err = cudaFree(g_pVerteInBuffer);
 	if (err != cudaSuccess)
-		std::cout << "error with freeing memoery vertexbuffer" << std::endl;
+		std::cout << "error with freeing memory g_pVerteInBuffer" << std::endl;
 
 	err = cudaMalloc(&g_pVerteInBuffer, g_VertCount * sizeof(Vertex_In));
 	if (err != cudaSuccess)
-		std::cout << "error with freeing memoery vertexbuffer" << std::endl;
-	err = cudaMemcpy(g_pVerteInBuffer, vertices.data(), g_VertCount * sizeof(Vertex_In), cudaMemcpyHostToDevice);
+		std::cout << "error allocating memory for g_pVerteInBuffer" << std::endl;
+
+	err = cudaGetLastError();
+
+	err = cudaMemcpy(g_pVerteInBuffer, vertices, g_VertCount * sizeof(Vertex_In), cudaMemcpyHostToDevice);
 	if (err != cudaSuccess)
-		std::cout << "error with freeing memoery vertexbuffer" << std::endl;
+		std::cout << cudaGetErrorString(err) << std::endl;
 
 	// verte out buffer
 	err = cudaFree(g_pVerteOutBuffer);
 	if (err != cudaSuccess)
-		std::cout << "error with freeing memoery vertexbuffer" << std::endl;
+		std::cout << "error with freeing memory g_pVerteOutBuffer" << std::endl;
+
 	err = cudaMalloc(&g_pVerteOutBuffer, g_VertCount * sizeof(Vertex_Out));
 	if (err != cudaSuccess)
-		std::cout << "error with freeing memoery vertexbuffer" << std::endl;
+		std::cout << "error allocating memory for g_pVerteOutBuffer" << std::endl;
+
 	err = cudaMemset(g_pVerteOutBuffer, 0, g_VertCount * sizeof(Vertex_In));
 	if (err != cudaSuccess)
-		std::cout << "error with freeing memoery vertexbuffer" << std::endl;
+		std::cout << "error with copying memory g_pVerteOutBuffer" << std::endl;
 
 	err = cudaFree(g_DepthBuffer);
 	if (err != cudaSuccess)
-		std::cout << "error with freeing memoery vertexbuffer" << std::endl;
+		std::cout << "error with freeing memory g_DepthBuffer" << std::endl;
+
 	err = cudaMalloc(&g_DepthBuffer, screenSize * sizeof(depthInfo));
 	if (err != cudaSuccess)
-		std::cout << "error with freeing memoery vertexbuffer" << std::endl;
+		std::cout << "error allocating memory for g_DepthBuffer" << std::endl;
+
 	err = cudaMemset(g_DepthBuffer, 0, screenSize * sizeof(depthInfo));
 	if (err != cudaSuccess)
-		std::cout << "error with freeing memoery vertexbuffer" << std::endl;
-
-	//err = cudaMemcpy(&g_DepthBuffer, depth.data(), SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(float), cudaMemcpyHostToDevice);
-	//if (err != cudaSuccess)
-	//	std::cout << "error with freeing memoery vertexbuffer" << std::endl;
+		std::cout << "error with copying memory g_DepthBuffer" << std::endl;
 
 	// Inde buffer
 	cudaFree(g_pIndeBuffer);
-	cudaMalloc(&g_pIndeBuffer, g_IndeCount * sizeof(int));
-	cudaMemcpy(g_pIndeBuffer, indices.data(), sizeof(int) * g_IndeCount, cudaMemcpyHostToDevice);
+	cudaMalloc(&g_pIndeBuffer, g_IndeCount * sizeof(unsigned int));
+	cudaMemcpy(g_pIndeBuffer, indices.data(), sizeof(unsigned int) * g_IndeCount, cudaMemcpyHostToDevice);
 
 	// Triangle buffer
 	cudaFree(dev_primitives);
@@ -113,15 +120,9 @@ void InitBuffers(const std::vector<Vertex_In>& vertices,const std::vector<int>& 
 	g_TextureWidth = textures[0]->GetWidth();
 	g_TextureHeight = textures[0]->GetHeight();
 
-
-
-	//texture<float, cudaTextureType2D,
-	//	cudaReadModeElementType> texRef;
-	//cudaChannelFormatDesc channelDesc =
-	//	cudaCreateChannelDesc<float>();
-	//size_t offset;
-	//cudaBindTexture2D(&offset, texRef, devPtr, &channelDesc,
-	//	width, height, pitch);
+	err = cudaFree(g_WorldMatrix);
+	err = cudaMalloc(&g_WorldMatrix, sizeof(glm::mat4));
+	err = cudaMemcpy(g_WorldMatrix, &worldMatrix[0][0], sizeof(glm::mat4), cudaMemcpyHostToDevice);
 
 
 
@@ -179,13 +180,13 @@ inline float Cross(const glm::vec2 v1, const glm::vec2 v2)
 }
 
 __global__ 
-void VerteShading(int w, int h, float far, float near, int verteCount, const Vertex_In* verteInBuffer, Vertex_Out* verteOutBuffer, const glm::mat4 worldToView ,const glm::mat4 projectionMatrix)
+void VerteShading(int w, int h, float far, float near, int verteCount, const Vertex_In* verteInBuffer, Vertex_Out* verteOutBuffer, const glm::mat4 worldToView ,const glm::mat4 projectionMatrix, const glm::mat4 meshWorldMatrix)
 {
 	int index = ((blockIdx.x * blockDim.x) + threadIdx.x) + (((blockIdx.y * blockDim.y) + threadIdx.y) * w);
 
 	if (index >= verteCount) return;
 
-	glm::vec4 projectedVertex = projectionMatrix * worldToView * glm::vec4(verteInBuffer[index].position, 1.0f);
+	glm::vec4 projectedVertex = projectionMatrix * worldToView * meshWorldMatrix * glm::vec4(verteInBuffer[index].position, 1.0f);
 
 	glm::vec3 normDeviceCoordinates = glm::vec3(projectedVertex.x, projectedVertex.y, projectedVertex.z) / projectedVertex.w;
 
@@ -227,8 +228,14 @@ void AssemblePrimitives(int primitiveCount, const Vertex_Out* vertexBufferOut, T
 			max(primitives[index].v[0].screenPosition.z, max(primitives[index].v[1].screenPosition.z, primitives[index].v[2].screenPosition.z)),
 		};
 
-		//primitives[index].boundingBox = getAABBForTriangle(primitives[index]);
-		primitives[index].visible = true;
+		bool visible = true;
+		if (primitives[index].boundingBox.min.x < 0 && primitives[index].boundingBox.max.x < 0) visible = false;
+		if (primitives[index].boundingBox.min.y < 0 && primitives[index].boundingBox.max.y < 0) visible = false;
+
+		if (primitives[index].boundingBox.min.x > SCREEN_WIDTH && primitives[index].boundingBox.max.x > SCREEN_WIDTH) visible = false;
+		if (primitives[index].boundingBox.min.y > SCREEN_HEIGHT && primitives[index].boundingBox.max.y > SCREEN_HEIGHT) visible = false;
+
+		primitives[index].visible = visible;
 
 	}
 }
@@ -254,7 +261,7 @@ __host__
 __device__
 glm::vec3 TextureSample(TextureData* textures, glm::vec2 uv, int width, int height)
 {
-	// Not bilinear
+	// Linear
 	int u = uv.x * width;
 	int v = uv.y * height;
 
@@ -270,14 +277,14 @@ glm::vec3 TextureSample(TextureData* textures, glm::vec2 uv, int width, int heig
 	color /= 255.f;
 
 	return color;
-
-	//return glm::vec3{ static_cast<float>(r) / 255.f,static_cast<float>(g) / 255.f,static_cast<float>(b) / 255.f };
 }
 
 __host__
 __device__
 bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle primitive, TextureData* textures, int textureWidth, int textureHeight)
 {
+	if (!primitive.visible) return false;
+
 	float weights[3];
 	float totalTriangleArea = abs(Cross(glm::vec2{ primitive.v[0].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }, glm::vec2{ primitive.v[1].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }));
 
@@ -377,7 +384,7 @@ void FragmentShading(uint32_t* buf, depthInfo* depthBuf, const Triangle* primiti
 }
 
 __global__
-void ClearDepthBuffer(depthInfo* depthBuf)
+void ClearDepthBufferGPU(depthInfo* depthBuf)
 {
 	const int xPix = blockDim.x * blockIdx.x + threadIdx.x;
 	const int yPix = blockDim.y * blockIdx.y + threadIdx.y;
@@ -385,6 +392,25 @@ void ClearDepthBuffer(depthInfo* depthBuf)
 	unsigned int pos = SCREEN_WIDTH * yPix + xPix;
 
 	depthBuf[pos].depth = 1.0f;
+}
+void ClearDepthBuffer()
+{
+	int sideLength2d = 8;
+	dim3 blockSize2d(sideLength2d, sideLength2d);
+	dim3 blockCount2d((SCREEN_WIDTH + blockSize2d.x - 1) / blockSize2d.x,
+		(SCREEN_HEIGHT + blockSize2d.y - 1) / blockSize2d.y);
+
+	int vertexBlockSize = VERTBLOCKSIZE, fragmentBlockSize = FRAGBLOCKSIZE;
+	int vertexGridSize = (g_VertCount + VERTBLOCKSIZE - 1) / VERTBLOCKSIZE;
+
+	const dim3 blocksPerGrid(H_TILES, V_TILES);
+	const dim3 threadsPerBlock(TILE_WIDTH, TILE_HEIGHT);
+
+	int w = static_cast<int>(SCREEN_WIDTH);
+	int h = static_cast<int>(SCREEN_HEIGHT);
+
+	// Clear depth buffer
+	ClearDepthBufferGPU << <blocksPerGrid, threadsPerBlock >> > (g_DepthBuffer);
 }
 
 // Rasterizer loop
@@ -405,11 +431,8 @@ void gpuRender(uint32_t* buf)
 	int h = static_cast<int>(SCREEN_HEIGHT);
 
 
-	// Clear depth buffer
-	ClearDepthBuffer << <blocksPerGrid, threadsPerBlock >> > (g_DepthBuffer);
-
 	// Verte shading
-	VerteShading<<<vertexGridSize, vertexBlockSize>>>(w, h,g_pCamera->GetFar(), g_pCamera->GetNear(), g_VertCount, g_pVerteInBuffer, g_pVerteOutBuffer, g_pCamera->GetViewMatrix(), g_pCamera->GetProjectionMatrix());
+	VerteShading<<<vertexGridSize, vertexBlockSize>>>(w, h,g_pCamera->GetFar(), g_pCamera->GetNear(), g_VertCount, g_pVerteInBuffer, g_pVerteOutBuffer, g_pCamera->GetViewMatrix(), g_pCamera->GetProjectionMatrix(), *g_WorldMatrix);
 
 	// Primitive Assembly
 	AssemblePrimitives<<<vertexGridSize, vertexBlockSize>>>(primitiveCount, g_pVerteOutBuffer, dev_primitives, g_pIndeBuffer);
