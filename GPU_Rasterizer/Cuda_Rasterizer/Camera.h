@@ -3,7 +3,9 @@
 
 #define GLM_FORCE_CUDA
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#pragma warning(push, 0)
 #include <glm\glm.hpp>
+#pragma warning(pop)
 
 #include <cuda_runtime.h>
 

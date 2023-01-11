@@ -27,7 +27,7 @@ void Transform::SetRotation(float x, float y, float z)
     m_Rotation.z = z;
 }
 
-void Transform::SetRotation(float angle, glm::vec3 axis)
+void Transform::SetRotation(float /*angle*/, glm::vec3 /*axis*/)
 {
     m_Dirty = true;
 }

@@ -2,7 +2,9 @@
 #include <string>
 #include <SDL_image.h>
 
-#include <glm/glm.hpp>
+#pragma warning(push, 0)
+#include <glm\glm.hpp>
+#pragma warning(pop)
 
 #include <crt/host_defines.h>
 #include <vector>

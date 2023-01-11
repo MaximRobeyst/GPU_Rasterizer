@@ -9,8 +9,10 @@
 #include <cuda.h>
 
 #define GLM_FORCE_CUDA
-#include <glm\glm.hpp>
+#pragma warning(push, 0)
+#include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#pragma warning(pop)
 
 #include <vector>
 
@@ -54,7 +56,7 @@ struct Triangle {
 };
 
 void gpuInit(Camera* pCamera);
-void InitBuffers(Vertex_In* vertices, int vertCount, const std::vector<unsigned int>& indices, const std::vector<Texture*>& textures, glm::mat4& worldMatrix);
+void InitBuffers(Vertex_In* vertices, int vertCount, const std::vector<unsigned int>& indices, const std::vector<Texture*>& textures, const glm::mat4& worldMatrix);
 
 void ClearDepthBuffer();
 void ClearScreen(void* src);

@@ -19,7 +19,10 @@
 #include <chrono>
 
 #define GLM_FORCE_CUDA
+#pragma warning(push, 0)
 #include <glm\glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#pragma warning(pop)
 
 #include "RastizerDebugger.h"
 #include "EOBJParser.h"
@@ -32,7 +35,7 @@ void render(SDL_Surface* screen, void* cuda_pixels, const std::vector<Mesh*>& pM
 {
 	for (int i = 0; i < pMeshes.size(); ++i)
 	{
-		InitBuffers(pMeshes[i]->GetVertexPointer(), pMeshes[i]->GetVertices().size(), pMeshes[i]->GetIndices(), pMeshes[i]->GetTextures(), pMeshes[i]->GetTransform()->GetWorldTransform());
+		InitBuffers(pMeshes[i]->GetVertexPointer(), static_cast<int>(pMeshes[i]->GetVertices().size()), pMeshes[i]->GetIndices(), pMeshes[i]->GetTextures(), pMeshes[i]->GetTransform()->GetWorldTransform());
 		gpuRender((uint32_t*)cuda_pixels);
 	}
 	if ( gpuBlit(cuda_pixels, screen->pixels) != 0 ) 
@@ -44,10 +47,10 @@ void render(SDL_Surface* screen, void* cuda_pixels, const std::vector<Mesh*>& pM
 	};
 }
 
-int main(int argc, char* args[]) {
+int main(int /*argc*/, char* /*args*/[]) {
 
-	uint32_t time_step = 1000. / 60. ;
-	uint32_t next_time_step = SDL_GetTicks();
+	uint32_t time_step{ static_cast<uint32_t>(1000. / 60.) };
+	uint32_t next_time_step{ SDL_GetTicks() };
 
 	//stbi_set_flip_vertically_on_load(true);
 
@@ -133,7 +136,6 @@ int main(int argc, char* args[]) {
 	Camera* pCamera = new Camera{ glm::vec3{ 0,0,5.f }, glm::vec3{ 0,0,-1.0f }, 45.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
 
 	//InitBuffers(triangleVertices, indices, textures);
-	float elapsedSec = 0.0f;
 	float fpsCounter = 0.0f;
 
 	//RastizerDebugger rasterizer{ pCamera, triangleVertices, indices , textures[0]};

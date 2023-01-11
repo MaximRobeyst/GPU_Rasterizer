@@ -1,6 +1,8 @@
 #pragma once
 #include <vector>
-#include <glm/glm.hpp>
+#pragma warning(push, 0)
+#include <glm\glm.hpp>
+#pragma warning(pop)
 
 #include "gpu.h"
 

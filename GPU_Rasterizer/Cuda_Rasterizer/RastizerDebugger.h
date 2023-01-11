@@ -1,8 +1,10 @@
 #pragma once
 
 #define GLM_FORCE_CUDA
+#pragma warning(push, 0)
 #include <glm\glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#pragma warning(pop)
 
 #include "gpu.h"
 
@@ -35,8 +37,8 @@ private:
 	inline glm::vec3 TextureSample(TextureData* textures, glm::vec2 uv, int width, int height)
 	{
 		// Not bilinear
-		int u = uv.x * width;
-		int v = uv.y * height;
+		int u = static_cast<int>(uv.x) * width;
+		int v = static_cast<int>(uv.y) * height;
 
 		// https://stackoverflow.com/questions/35005603/get-color-of-the-texture-at-uv-coordinate
 		int uvIndex = 3 * (u + (v * width));
