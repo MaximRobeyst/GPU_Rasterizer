@@ -95,18 +95,19 @@ int main(int argc, char* args[]) {
 	//	std::cerr << "failed to alloc gpu memory" << std::endl;
 	//}
 
+	std::vector<Mesh*> pMeshes{};
 
 	std::vector<Vertex_In> triangleVertices
 	{
 		// Triangle 1
-		Vertex_In{glm::vec3{.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 1.0f, 1.0f}, glm::vec2{1,1}},
-		Vertex_In{glm::vec3{-.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 1.0f, 1.0f}, glm::vec2{0,0}},
-		Vertex_In{glm::vec3{.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 1.0f, 1.0f}, glm::vec2{1,0}},
+		Vertex_In{glm::vec3{.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 0.0f, 0.0f}, glm::vec2{1,1}},
+		Vertex_In{glm::vec3{-.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 1.0f, 0.0f}, glm::vec2{0,0}},
+		Vertex_In{glm::vec3{.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 0.0f, 1.0f}, glm::vec2{1,0}},
 
 		// Triangle 2
-		Vertex_In{glm::vec3{.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 1.0f, 1.0f}, glm::vec2{1,1}},
-		Vertex_In{glm::vec3{-.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 1.0f, 1.0f}, glm::vec2{0,0}},
-		Vertex_In{glm::vec3{-.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 1.0f, 1.0f}, glm::vec2{0,1}}
+		Vertex_In{glm::vec3{.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 0.0f, 0.0f}, glm::vec2{1,1}},
+		Vertex_In{glm::vec3{-.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 1.0f, 0.0f}, glm::vec2{0,0}},
+		Vertex_In{glm::vec3{-.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 0.0f, 0.0f}, glm::vec2{0,1}}
 	};
 
 	std::vector<unsigned int> indices
@@ -115,9 +116,10 @@ int main(int argc, char* args[]) {
 		5, 4, 3,
 	};
 
-	Elite::ParseOBJ("Resources/tuktuk.obj", triangleVertices, indices);
+	pMeshes.emplace_back(new Mesh(triangleVertices, indices));
+	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{0.0f,0,0} });
 
-	std::vector<Mesh*> pMeshes{};
+	Elite::ParseOBJ("Resources/tuktuk.obj", triangleVertices, indices);
 	pMeshes.emplace_back(new Mesh( triangleVertices, indices ));
 	pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/tuktuk.png" });
 	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{-10.0f,-5,0} });
@@ -179,7 +181,7 @@ int main(int argc, char* args[]) {
 		ClearDepthBuffer();
 
 		render(default_screen, gpu_Screen, pMeshes);
-		ClearScreen(gpu_Screen, glm::vec3{0.2f});
+		ClearScreen(gpu_Screen, glm::vec3{0.1f});
 		SDL_UnlockSurface(default_screen);
 
 		SDL_UpdateTexture(sdlTexture, NULL, default_screen->pixels, default_screen->pitch);

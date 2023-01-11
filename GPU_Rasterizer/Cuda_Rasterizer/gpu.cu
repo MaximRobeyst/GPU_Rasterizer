@@ -102,6 +102,18 @@ void InitBuffers(Vertex_In* vertices, int vertCount,const std::vector<unsigned i
 	cudaMalloc(&dev_primitives, g_VertCount / 3 * sizeof(Triangle));
 	cudaMemset(dev_primitives, 0, g_VertCount / 3 * sizeof(Triangle));
 
+	if (textures.empty())
+	{
+		g_pTexture = nullptr;
+
+		g_TextureWidth = 0;
+		g_TextureHeight =0;
+		g_TextureChannels = 0;
+
+		checkCUDAError("initBuffers");
+		return;
+	}
+
 	auto s = textures[0]->GetSize() * sizeof(TextureData);
 
 	err = cudaFree(g_pTexture);
@@ -358,7 +370,10 @@ bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle
 	endValue.normal = glm::normalize((endValue.normal / 3.f));
 	endValue.tangent = glm::normalize((endValue.tangent / 3.f));
 
-	glm::vec3 endColor = TextureSample(textures, endValue.uv, textureWidth, textureHeight, channels) * endValue.color;
+	glm::vec3 endColor = endValue.color;
+
+	if(textures != nullptr)
+		endColor = TextureSample(textures, endValue.uv, textureWidth, textureHeight, channels) * endColor;
 
 	//lighting
 	glm::vec3 lightDirection{ -.577f, .577f, .577f };
