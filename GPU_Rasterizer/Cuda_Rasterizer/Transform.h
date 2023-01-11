@@ -6,14 +6,20 @@
 class Transform
 {
 public:
-	Transform(glm::vec3 position = glm::vec3{});
+	Transform(glm::vec3 position = glm::vec3{}, glm::vec3 scale = glm::vec3{1.0f});
 	~Transform() = default;
 
 	glm::vec3 GetPosition() const;
 
+	// Position
 	void SetPosition(glm::vec3 position);
+
+	// Rotation
 	void SetRotation(float x, float y, float z);
 	void SetRotation(float angle, glm::vec3 axis);
+
+	// Scale
+	void SetScale(const glm::vec3& scale);
 
 	glm::mat4 GetWorldTransform();
 	void SetWorldTransform(glm::mat4 matrix);

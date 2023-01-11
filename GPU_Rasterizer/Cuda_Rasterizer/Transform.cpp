@@ -1,8 +1,9 @@
 #include "Transform.h"
 
 
-Transform::Transform(glm::vec3 position)
+Transform::Transform(glm::vec3 position, glm::vec3 scale)
     : m_Position{position}
+    , m_Scale{scale}
 {
 
 }
@@ -31,6 +32,12 @@ void Transform::SetRotation(float angle, glm::vec3 axis)
     m_Dirty = true;
 }
 
+void Transform::SetScale(const glm::vec3& scale)
+{
+    m_Dirty = true;
+    m_Scale = scale;
+}
+
 glm::mat4 Transform::GetWorldTransform()
 {
     if(!m_Dirty)
@@ -39,6 +46,7 @@ glm::mat4 Transform::GetWorldTransform()
     m_WorldTransform = glm::mat4{ 1.0f };
     m_WorldTransform = glm::translate(m_WorldTransform, m_Position);
     m_WorldTransform = glm::rotate(m_WorldTransform, m_Rotation.y, glm::vec3{ 0,1,0 });
+    m_WorldTransform = glm::scale(m_WorldTransform, m_Scale);
 
     m_Dirty = false;
     return m_WorldTransform;

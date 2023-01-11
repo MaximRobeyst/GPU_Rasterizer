@@ -18,6 +18,7 @@ public:
 
 	int GetWidth() const;
 	int GetHeight() const;
+	int GetChannels() const;
 
 private:
 	unsigned char* m_pImageData;

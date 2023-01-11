@@ -58,6 +58,7 @@ void InitBuffers(Vertex_In* vertices, int vertCount, const std::vector<unsigned 
 
 void ClearDepthBuffer();
 void ClearScreen(void* src);
+void ClearScreen(uint32_t* src, glm::vec3 clearColor = glm::vec3{0.0f} );
 
 uint32_t* gpuAllocScreenBuffer(void);
 float * gpuAllocDepthBuffer(void) ;

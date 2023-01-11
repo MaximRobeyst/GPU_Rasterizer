@@ -39,6 +39,7 @@ static depthInfo* g_DepthBuffer;
 
 static int g_TextureWidth;
 static int g_TextureHeight;
+static int g_TextureChannels;
 
 static glm::mat4 g_WorldMatrix;
 
@@ -109,8 +110,7 @@ void InitBuffers(Vertex_In* vertices, int vertCount,const std::vector<unsigned i
 
 	g_TextureWidth = textures[0]->GetWidth();
 	g_TextureHeight = textures[0]->GetHeight();
-
-
+	g_TextureChannels = textures[0]->GetChannels();
 
 	checkCUDAError("initBuffers");
 }
@@ -151,6 +151,37 @@ void gpuFree(void* gpu_mem)
 void ClearScreen(void* src)
 {
 	cudaMemset(src, 0, SCREEN_SIZE * 4);
+}
+
+__global__
+void ClearScreenGPU(uint32_t* screen, glm::vec3 color)
+{
+	const int xPix = blockDim.x * blockIdx.x + threadIdx.x;
+	const int yPix = blockDim.y * blockIdx.y + threadIdx.y;
+
+	unsigned int pos = SCREEN_WIDTH * yPix + xPix;
+
+	screen[pos] = (uint8_t)(color.b * 255.0f) | ((uint8_t)(color.g * 255) << 8) | ((uint8_t)(color.r * 255) << 16) | (uint8_t)(255.0f) << 24;
+}
+
+void ClearScreen(uint32_t* src, glm::vec3 clearColor)
+{
+	int sideLength2d = 8;
+	dim3 blockSize2d(sideLength2d, sideLength2d);
+	dim3 blockCount2d((SCREEN_WIDTH + blockSize2d.x - 1) / blockSize2d.x,
+		(SCREEN_HEIGHT + blockSize2d.y - 1) / blockSize2d.y);
+
+	int vertexBlockSize = VERTBLOCKSIZE, fragmentBlockSize = FRAGBLOCKSIZE;
+	int vertexGridSize = (g_VertCount + VERTBLOCKSIZE - 1) / VERTBLOCKSIZE;
+
+	const dim3 blocksPerGrid(H_TILES, V_TILES);
+	const dim3 threadsPerBlock(TILE_WIDTH, TILE_HEIGHT);
+
+	int w = static_cast<int>(SCREEN_WIDTH);
+	int h = static_cast<int>(SCREEN_HEIGHT);
+
+	// Clear depth buffer
+	ClearScreenGPU << <blocksPerGrid, threadsPerBlock >> > (src, clearColor);
 }
 
 int gpuBlit(void* src, void* dst)
@@ -250,14 +281,14 @@ glm::vec3 MaxToOne(const glm::vec3 color)
 
 __host__
 __device__
-glm::vec3 TextureSample(TextureData* textures, glm::vec2 uv, int width, int height)
+glm::vec3 TextureSample(TextureData* textures, glm::vec2 uv, int width, int height, int channels)
 {
 	// Linear
 	int u = uv.x * width;
 	int v = uv.y * height;
 
 	// https://stackoverflow.com/questions/35005603/get-color-of-the-texture-at-uv-coordinate
-	int uvIndex = 3 * (u + (v * width));
+	int uvIndex = channels * (u + (v * width));
 
 	// https://www.opengl.org/discussion_boards/showthread.php/170651-Is-it-possible-to-get-the-pixel-color
 	float r = textures[uvIndex];
@@ -272,10 +303,8 @@ glm::vec3 TextureSample(TextureData* textures, glm::vec2 uv, int width, int heig
 
 __host__
 __device__
-bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle primitive, TextureData* textures, int textureWidth, int textureHeight)
+bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle primitive, TextureData* textures, int textureWidth, int textureHeight, int channels)
 {
-	if (!primitive.visible) return false;
-
 	float weights[3];
 	float totalTriangleArea = abs(Cross(glm::vec2{ primitive.v[0].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }, glm::vec2{ primitive.v[1].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }));
 
@@ -329,7 +358,7 @@ bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle
 	endValue.normal = glm::normalize((endValue.normal / 3.f));
 	endValue.tangent = glm::normalize((endValue.tangent / 3.f));
 
-	glm::vec3 endColor = TextureSample(textures, endValue.uv, textureWidth, textureHeight) * endValue.color;
+	glm::vec3 endColor = TextureSample(textures, endValue.uv, textureWidth, textureHeight, channels) * endValue.color;
 
 	//lighting
 	glm::vec3 lightDirection{ -.577f, .577f, .577f };
@@ -371,7 +400,7 @@ glm::vec3 ConvertUint32ToRGB(uint32_t pixel)
 }
 
 __global__
-void FragmentShading(uint32_t* buf, depthInfo* depthBuf, const Triangle* primitives, int primitiveCount, TextureData* textures, int textureWidth, int textureHeight)
+void FragmentShading(uint32_t* buf, depthInfo* depthBuf, const Triangle* primitives, int primitiveCount, TextureData* textures, int textureWidth, int textureHeight, int channels)
 {
 	const int xPix = blockDim.x * blockIdx.x + threadIdx.x;
 	const int yPix = blockDim.y * blockIdx.y + threadIdx.y;
@@ -385,7 +414,9 @@ void FragmentShading(uint32_t* buf, depthInfo* depthBuf, const Triangle* primiti
 		if (xPix < primitives[i].boundingBox.min.x || xPix > primitives[i].boundingBox.max.x) continue;
 		if (yPix < primitives[i].boundingBox.min.y || yPix > primitives[i].boundingBox.max.y) continue;
 
-		if (!getPixColor(xPix, yPix, &depthBuf[pos], &color, primitives[i], textures, textureWidth, textureHeight))
+		if (!primitives[i].visible) continue;
+
+		if (!getPixColor(xPix, yPix, &depthBuf[pos], &color, primitives[i], textures, textureWidth, textureHeight, channels))
 			continue;
 	}
 
@@ -438,6 +469,8 @@ void ClearDepthBuffer()
 	ClearDepthBufferGPU << <blocksPerGrid, threadsPerBlock >> > (g_DepthBuffer);
 }
 
+//#define TIMER
+
 // Rasterizer loop
 void gpuRender(uint32_t* buf) 
 {
@@ -454,19 +487,68 @@ void gpuRender(uint32_t* buf)
 
 	int w = static_cast<int>(SCREEN_WIDTH);
 	int h = static_cast<int>(SCREEN_HEIGHT);
+#ifdef TIMER
+	cudaEvent_t startVertexShading, stopVertexShading;
+	cudaEventCreate(&startVertexShading);
+	cudaEventCreate(&stopVertexShading);
 
+	cudaEvent_t startPrimitiveAssambly, stopPrimitiveAssambly;
+	cudaEventCreate(&startPrimitiveAssambly);
+	cudaEventCreate(&stopPrimitiveAssambly);
 
-	// Verte shading
-	VerteShading<<<vertexGridSize, vertexBlockSize>>>(w, h,g_pCamera->GetFar(), g_pCamera->GetNear(), g_VertCount, g_pVerteInBuffer, g_pVerteOutBuffer, g_pCamera->GetViewMatrix(), g_pCamera->GetProjectionMatrix(), g_WorldMatrix);
+	cudaEvent_t startFragmentShading, stopFragmentShading;
+	cudaEventCreate(&startFragmentShading);
+	cudaEventCreate(&stopFragmentShading);
+#endif // DEBUG
+
+	// Vertex shading
+#ifdef TIMER
+	cudaEventRecord(startVertexShading);
+	VerteShading << <vertexGridSize, vertexBlockSize >> > (w, h, g_pCamera->GetFar(), g_pCamera->GetNear(), g_VertCount, g_pVerteInBuffer, g_pVerteOutBuffer, g_pCamera->GetViewMatrix(), g_pCamera->GetProjectionMatrix(), g_WorldMatrix);
+	cudaEventRecord(stopVertexShading);
+#else
+	VerteShading << <vertexGridSize, vertexBlockSize >> > (w, h, g_pCamera->GetFar(), g_pCamera->GetNear(), g_VertCount, g_pVerteInBuffer, g_pVerteOutBuffer, g_pCamera->GetViewMatrix(), g_pCamera->GetProjectionMatrix(), g_WorldMatrix);
+#endif // TIMER
 
 	// Primitive Assembly
-	AssemblePrimitives<<<vertexGridSize, vertexBlockSize>>>(primitiveCount, g_pVerteOutBuffer, dev_primitives, g_pIndeBuffer);
+#ifdef TIMER
+	cudaEventRecord(startPrimitiveAssambly);
+	AssemblePrimitives << <vertexGridSize, vertexBlockSize >> > (primitiveCount, g_pVerteOutBuffer, dev_primitives, g_pIndeBuffer);
+	cudaEventRecord(stopPrimitiveAssambly);
+#else
+	AssemblePrimitives << <vertexGridSize, vertexBlockSize >> > (primitiveCount, g_pVerteOutBuffer, dev_primitives, g_pIndeBuffer);
+#endif // TIMER
 
 	// Culling 
 
 
 	// Rasterization
-	FragmentShading<<<blocksPerGrid, threadsPerBlock >>>(buf, g_DepthBuffer, dev_primitives, primitiveCount, g_pTexture, g_TextureWidth, g_TextureHeight);
+#ifdef TIMER
+	cudaEventRecord(startFragmentShading);
+	FragmentShading << <blocksPerGrid, threadsPerBlock >> > (buf, g_DepthBuffer, dev_primitives, primitiveCount, g_pTexture, g_TextureWidth, g_TextureHeight, g_TextureChannels);
+	cudaEventRecord(stopFragmentShading);
+#else
+	FragmentShading << <blocksPerGrid, threadsPerBlock >> > (buf, g_DepthBuffer, dev_primitives, primitiveCount, g_pTexture, g_TextureWidth, g_TextureHeight, g_TextureChannels);
+#endif // TIMER
+
+#ifdef TIMER
+	cudaEventSynchronize(stopVertexShading);
+	cudaEventSynchronize(stopPrimitiveAssambly);
+	cudaEventSynchronize(stopFragmentShading);
+
+	float millisecondsVertex = 0;
+	cudaEventElapsedTime(&millisecondsVertex, startVertexShading, stopVertexShading);
+	float millisecondsPrimitive = 0;
+	cudaEventElapsedTime(&millisecondsPrimitive, startPrimitiveAssambly, stopPrimitiveAssambly);
+	float millisecondsRasterization = 0;
+	cudaEventElapsedTime(&millisecondsRasterization, startFragmentShading, stopFragmentShading);
+
+	std::cout << "Vertexshading milliseconds: " << millisecondsVertex << std::endl;
+	std::cout << "AssemblePrimitives milliseconds: " << millisecondsPrimitive << std::endl;
+	std::cout << "FragmentShading milliseconds: " << millisecondsRasterization << std::endl;
+	std::cout << std::endl;
+
+#endif // DEBUG
 
 
 	checkCUDAError("gpuRender");

@@ -119,14 +119,14 @@ int main(int argc, char* args[]) {
 
 	std::vector<Mesh*> pMeshes{};
 	pMeshes.emplace_back(new Mesh( triangleVertices, indices ));
-	pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/tuktuk.jpg" });
-	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{-10.0f,0,0} });
+	pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/tuktuk.png" });
+	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{-10.0f,-5,0} });
 
 
 	Elite::ParseOBJ("Resources/vehicle.obj", triangleVertices, indices);
 	pMeshes.emplace_back(new Mesh(triangleVertices, indices));
-	pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/vehicle_diffuse.jpg" });
-	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{10.0f,0,0} });
+	pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/vehicle_diffuse.png" });
+	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{10.0f,0,0} ,  glm::vec3{0.5f} });
 
 	Camera* pCamera = new Camera{ glm::vec3{ 0,0,5.f }, glm::vec3{ 0,0,-1.0f }, 45.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
 
@@ -155,6 +155,7 @@ int main(int argc, char* args[]) {
 		{
 		    if (e.type == SDL_QUIT) 
 			{
+				cudaDeviceSynchronize();
 		        break;
 		    }
 			if (e.type == SDL_KEYDOWN)
@@ -178,7 +179,7 @@ int main(int argc, char* args[]) {
 		ClearDepthBuffer();
 
 		render(default_screen, gpu_Screen, pMeshes);
-		ClearScreen(gpu_Screen);
+		ClearScreen(gpu_Screen, glm::vec3{0.2f});
 		SDL_UnlockSurface(default_screen);
 
 		SDL_UpdateTexture(sdlTexture, NULL, default_screen->pixels, default_screen->pitch);
