@@ -31,6 +31,8 @@ static TextureData* g_pTexture = NULL;
 static int* g_pIndeBuffer;
 static int g_IndeCount;
 
+static int* dev_mutex = NULL;
+
 // Triangle Buffer
 static Triangle* dev_primitives = NULL;
 static int primitiveCount = 0;
@@ -101,6 +103,11 @@ void InitBuffers(Vertex_In* vertices, int vertCount,const std::vector<unsigned i
 	cudaFree(dev_primitives);
 	cudaMalloc(&dev_primitives, g_VertCount / 3 * sizeof(Triangle));
 	cudaMemset(dev_primitives, 0, g_VertCount / 3 * sizeof(Triangle));
+
+	// Mutex
+	cudaFree(dev_mutex);
+	cudaMalloc(&dev_mutex, SCREEN_SIZE * sizeof(int));
+	cudaMemset(&dev_mutex, 0, SCREEN_SIZE * sizeof(int));
 
 	if (textures.empty())
 	{
@@ -251,15 +258,15 @@ void AssemblePrimitives(int primitiveCount, const Vertex_Out* vertexBufferOut, T
 		}
 
 		primitives[index].boundingBox.min = glm::vec3{
-			min(primitives[index].v[0].screenPosition.x, min(primitives[index].v[1].screenPosition.x, primitives[index].v[2].screenPosition.x)),
-			min(primitives[index].v[0].screenPosition.y, min(primitives[index].v[1].screenPosition.y, primitives[index].v[2].screenPosition.y)),
-			min(primitives[index].v[0].screenPosition.z, min(primitives[index].v[1].screenPosition.z, primitives[index].v[2].screenPosition.z)),
+			min(0.0f, min(primitives[index].v[0].screenPosition.x, min(primitives[index].v[1].screenPosition.x, primitives[index].v[2].screenPosition.x))),
+			min(0.0f, min(primitives[index].v[0].screenPosition.y, min(primitives[index].v[1].screenPosition.y, primitives[index].v[2].screenPosition.y))),
+			min(0.0f, min(primitives[index].v[0].screenPosition.z, min(primitives[index].v[1].screenPosition.z, primitives[index].v[2].screenPosition.z))),
 		};
 
 		primitives[index].boundingBox.max = glm::vec3{
-			max(primitives[index].v[0].screenPosition.x, max(primitives[index].v[1].screenPosition.x, primitives[index].v[2].screenPosition.x)),
-			max(primitives[index].v[0].screenPosition.y, max(primitives[index].v[1].screenPosition.y, primitives[index].v[2].screenPosition.y)),
-			max(primitives[index].v[0].screenPosition.z, max(primitives[index].v[1].screenPosition.z, primitives[index].v[2].screenPosition.z)),
+			max(static_cast<float>(SCREEN_WIDTH), max(primitives[index].v[0].screenPosition.x, max(primitives[index].v[1].screenPosition.x, primitives[index].v[2].screenPosition.x))),
+			max(static_cast<float>(SCREEN_HEIGHT), max(primitives[index].v[0].screenPosition.y, max(primitives[index].v[1].screenPosition.y, primitives[index].v[2].screenPosition.y))),
+			max(1.0f, max(primitives[index].v[0].screenPosition.z, max(primitives[index].v[1].screenPosition.z, primitives[index].v[2].screenPosition.z))),
 		};
 
 		bool visible = true;
@@ -313,8 +320,22 @@ glm::vec3 TextureSample(TextureData* textures, glm::vec2 uv, int width, int heig
 	return color;
 }
 
-__host__
+__device__ float fAtomicMin(float* addr, float value)
+{
+	float old = *addr, assumed;
+
+	if (old <= value) return old;
+
+	do
+	{
+		assumed = old;
+		old = atomicCAS((unsigned int*)addr, __float_as_int(assumed), __float_as_int(value));
+	} while (old != assumed);
+	return old;
+}
+
 __device__
+static
 bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle primitive, TextureData* textures, int textureWidth, int textureHeight, int channels)
 {
 	float weights[3];
@@ -349,9 +370,10 @@ bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle
 		currentDepth += (1.f / primitive.v[i].screenPosition.z) * weights[i];
 	currentDepth = 1.f / currentDepth;
 
-	if (pixelDepth[0].depth < currentDepth)
+	fAtomicMin( (&pixelDepth[0].depth), currentDepth);
+
+	if (pixelDepth[0].depth != currentDepth)
 		return false;
-	pixelDepth[0].depth = currentDepth;
 	
 	Vertex_Out endValue;
 	float wInterpolated{};
@@ -441,21 +463,38 @@ void FragmentShading(uint32_t* buf, depthInfo* depthBuf, const Triangle* primiti
 
 // per polygon
 __global__
-void FragmentShadingPolygon(uint32_t* buf, depthInfo* depthBuf, const Triangle* primitives, int primitiveCount, TextureData* textures, int textureWidth, int textureHeight, int channels)
+void FragmentShadingPolygon(uint32_t* buf, depthInfo* depthBuf, const Triangle* primitives, int primitiveCount, TextureData* textures, int textureWidth, int textureHeight, int channels, int* dev_mutex)
 {
 	int index = (blockIdx.x * blockDim.x) + threadIdx.x;
 
-	if (index < primitiveCount)return;
-	if (!primitives[index].visible) return;
+	if (index >= primitiveCount)return;
+	//if (!primitives[index].visible) return;
 
-	for (int xPixel = min(0, static_cast<int>(primitives[index].boundingBox.min.x)); xPixel <= max(SCREEN_WIDTH, static_cast<int>(primitives[index].boundingBox.max.x)); ++xPixel)
+	BoundingBox aabb = primitives[index].boundingBox;
+
+	for (int xPixel = aabb.min.x; xPixel <= aabb.max.x; ++xPixel)
 	{
-		for (int yPixel = min(0, static_cast<int>(primitives[index].boundingBox.min.y)); yPixel <= max(SCREEN_HEIGHT, static_cast<int>(primitives[index].boundingBox.max.y)); ++yPixel)
+		for (int yPixel = aabb.min.y; yPixel <= aabb.max.y; ++yPixel)
 		{
 			unsigned int pos = SCREEN_WIDTH * yPixel + xPixel;
-			glm::vec3 color = ConvertUint32ToRGB(buf[pos]);
 
-			if (!getPixColor(xPixel, yPixel, &depthBuf[pos], &color, primitives[index], textures, textureWidth, textureHeight, channels));
+			//glm::vec3 color = ConvertUint32ToRGB(buf[pos]);
+			//
+			//getPixColor(xPixel, yPixel, &depthBuf[pos], &color, primitives[index], textures, textureWidth, textureHeight, channels);
+
+			bool isLocked = false;
+			
+			do
+			{
+				isLocked = (atomicCAS(&dev_mutex[pos], 0, 1) == 0);
+			
+				glm::vec3 color = ConvertUint32ToRGB(buf[pos]);
+			
+				getPixColor(xPixel, yPixel, &depthBuf[pos], &color, primitives[index], textures, textureWidth, textureHeight, channels);
+			
+				if (isLocked)
+					dev_mutex[pos] = 0;
+			} while (!isLocked);
 		}
 	}
 }
@@ -554,7 +593,7 @@ void gpuRender(uint32_t* buf)
 	AssemblePrimitives << <vertexGridSize, vertexBlockSize >> > (primitiveCount, g_pVerteOutBuffer, dev_primitives, g_pIndeBuffer);
 	cudaEventRecord(stopPrimitiveAssambly);
 #else
-	AssemblePrimitives << <fragmentGridSize, fragmentBlockSize >> > (primitiveCount, g_pVerteOutBuffer, dev_primitives, g_pIndeBuffer);
+	AssemblePrimitives << <vertexGridSize, vertexBlockSize >> > (primitiveCount, g_pVerteOutBuffer, dev_primitives, g_pIndeBuffer);
 #endif // TIMER
 
 	// Culling 
@@ -566,8 +605,14 @@ void gpuRender(uint32_t* buf)
 	FragmentShading << <blocksPerGrid, threadsPerBlock >> > (buf, g_DepthBuffer, dev_primitives, primitiveCount, g_pTexture, g_TextureWidth, g_TextureHeight, g_TextureChannels);
 	cudaEventRecord(stopFragmentShading);
 #else
-	FragmentShadingPolygon << <blocksPerGrid, threadsPerBlock >> > (buf, g_DepthBuffer, dev_primitives, primitiveCount, g_pTexture, g_TextureWidth, g_TextureHeight, g_TextureChannels);
+
+	dim3 numThreadsPerBlock(128);
+	dim3 numBlocksForPrims((primitiveCount + numThreadsPerBlock.x - 1) / numThreadsPerBlock.x);
+
+	FragmentShadingPolygon << <numBlocksForPrims, numThreadsPerBlock >> > (buf, g_DepthBuffer, dev_primitives, primitiveCount, g_pTexture, g_TextureWidth, g_TextureHeight, g_TextureChannels, dev_mutex);
 #endif // TIMER
+
+	cudaDeviceSynchronize();
 
 #ifdef TIMER
 	cudaEventSynchronize(stopVertexShading);
