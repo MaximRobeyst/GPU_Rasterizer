@@ -127,7 +127,6 @@ int main(int /*argc*/, char* /*args*/[]) {
 	pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/tuktuk.png" });
 	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{-10.0f,-5,0} });
 
-
 	Elite::ParseOBJ("Resources/vehicle.obj", triangleVertices, indices);
 	pMeshes.emplace_back(new Mesh(triangleVertices, indices));
 	pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/vehicle_diffuse.png" });

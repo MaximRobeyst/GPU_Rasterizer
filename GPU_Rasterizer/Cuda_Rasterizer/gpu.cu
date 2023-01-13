@@ -105,9 +105,9 @@ void InitBuffers(Vertex_In* vertices, int vertCount,const std::vector<unsigned i
 	cudaMemset(dev_primitives, 0, g_VertCount / 3 * sizeof(Triangle));
 
 	// Mutex
-	cudaFree(dev_mutex);
-	cudaMalloc(&dev_mutex, SCREEN_SIZE * sizeof(int));
-	cudaMemset(&dev_mutex, 0, SCREEN_SIZE * sizeof(int));
+	err = cudaFree(dev_mutex);
+	err = cudaMalloc(&dev_mutex, SCREEN_SIZE * sizeof(int));
+	err = cudaMemset(dev_mutex, 0, SCREEN_SIZE * sizeof(int));
 
 	if (textures.empty())
 	{
@@ -370,11 +370,10 @@ bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle
 		currentDepth += (1.f / primitive.v[i].screenPosition.z) * weights[i];
 	currentDepth = 1.f / currentDepth;
 
-	fAtomicMin( (&pixelDepth[0].depth), currentDepth);
-
-	if (pixelDepth[0].depth != currentDepth)
+	if (pixelDepth[0].depth < currentDepth)
 		return false;
-	
+	pixelDepth[0].depth = currentDepth;
+
 	Vertex_Out endValue;
 	float wInterpolated{};
 
@@ -394,7 +393,7 @@ bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle
 
 	glm::vec3 endColor = endValue.color;
 
-	if(textures != nullptr)
+	if (textures != nullptr)
 		endColor = TextureSample(textures, endValue.uv, textureWidth, textureHeight, channels) * endColor;
 
 	//lighting
@@ -404,9 +403,9 @@ bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle
 
 	// ambient
 	glm::vec3 ambientColor{ 0.05f, 0.05f, 0.05f };
-	
+
 	float observedArea = max(0.0f, (glm::dot(endValue.normal, lightDirection)));
-	
+
 	glm::vec3 shadedEndColor{};
 
 	shadedEndColor = lightColor * intensity * endColor * observedArea;
@@ -414,7 +413,6 @@ bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle
 
 	color[0] = MaxToOne(shadedEndColor);
 	return true;
-
 }
 
 __device__
@@ -484,17 +482,17 @@ void FragmentShadingPolygon(uint32_t* buf, depthInfo* depthBuf, const Triangle* 
 
 			bool isLocked = false;
 			
-			do
-			{
-				isLocked = (atomicCAS(&dev_mutex[pos], 0, 1) == 0);
+			//do
+			//{
+			//	isLocked = (atomicCAS(&dev_mutex[pos], 0, 1) == 0);
 			
 				glm::vec3 color = ConvertUint32ToRGB(buf[pos]);
 			
 				getPixColor(xPixel, yPixel, &depthBuf[pos], &color, primitives[index], textures, textureWidth, textureHeight, channels);
 			
-				if (isLocked)
-					dev_mutex[pos] = 0;
-			} while (!isLocked);
+			//	if (isLocked)
+			//		dev_mutex[pos] = 0;
+			//} while (!isLocked);
 		}
 	}
 }
@@ -606,13 +604,16 @@ void gpuRender(uint32_t* buf)
 	cudaEventRecord(stopFragmentShading);
 #else
 
-	dim3 numThreadsPerBlock(128);
-	dim3 numBlocksForPrims((primitiveCount + numThreadsPerBlock.x - 1) / numThreadsPerBlock.x);
+	//dim3 numThreadsPerBlock(128);
+	//dim3 numBlocksForPrims((primitiveCount + numThreadsPerBlock.x - 1) / numThreadsPerBlock.x);
 
-	FragmentShadingPolygon << <numBlocksForPrims, numThreadsPerBlock >> > (buf, g_DepthBuffer, dev_primitives, primitiveCount, g_pTexture, g_TextureWidth, g_TextureHeight, g_TextureChannels, dev_mutex);
+	FragmentShading << <blocksPerGrid, threadsPerBlock >> > (buf, g_DepthBuffer, dev_primitives, primitiveCount, g_pTexture, g_TextureWidth, g_TextureHeight, g_TextureChannels);
+
+	//FragmentShadingPolygon << <numBlocksForPrims, numThreadsPerBlock >> > (buf, g_DepthBuffer, dev_primitives, primitiveCount, g_pTexture, g_TextureWidth, g_TextureHeight, g_TextureChannels, dev_mutex);
 #endif // TIMER
-
-	cudaDeviceSynchronize();
+	auto err = cudaGetLastError();
+	if (err != cudaSuccess)
+		std::cout << cudaGetErrorString(err) << std::endl;
 
 #ifdef TIMER
 	cudaEventSynchronize(stopVertexShading);

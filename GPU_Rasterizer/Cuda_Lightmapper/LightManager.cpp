@@ -32,5 +32,5 @@ void LightManager::GenerateLightmap()
 
     InitLightMap(m_LightmapSize);
 
-    GenerateLightMap();
+    //GenerateLightMap();
 }

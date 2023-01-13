@@ -12,44 +12,66 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include "LightRasterizer.h"
+
+#include <algorithm>
 
 #define VERTBLOCKSIZE 256
 #define FRAGBLOCKSIZE 256
 
-__global__
-void VertexShader(int size, Vertex* vertexInBuffer, Lightmapper_Vert* vertexOutBuffer, glm::mat4 world, glm::mat4 projection)
+void LightRasterizer::MapVerticesToCoords(std::vector<Vertex>& vertices)
 {
-	int index = ((blockIdx.x * blockDim.x) + threadIdx.x) + (((blockIdx.y * blockDim.y) + threadIdx.y) * size);
+	const auto maxX = std::max_element(vertices.begin(), vertices.end(), [](Vertex lhs, Vertex rhs) {
+			return lhs.position.x < rhs.position.x;
+		})->position.x;
 
-	if (index >= g_VertCount) return;
+	const auto maxY = std::max_element(vertices.begin(), vertices.end(), [](Vertex lhs, Vertex rhs) {
+		return lhs.position.x < rhs.position.x;
+		})->position.y;
 
-	glm::vec4 projectedVertex = projection * world * glm::vec4(vertexInBuffer[index].position, 1.0f);
+	const auto maxZ = std::max_element(vertices.begin(), vertices.end(), [](Vertex lhs, Vertex rhs) {
+		return lhs.position.x < rhs.position.x;
+		})->position.z;
 
-	glm::vec3 normDeviceCoordinates = glm::vec3(projectedVertex.x, projectedVertex.y, projectedVertex.z) / projectedVertex.w;
+	auto maxAxis = std::max(maxX, maxY, maxZ);
+	if (maxAxis == maxX) m_ProjectionType = ProjectionType::XY_Projection;
+	if (maxAxis == maxY) m_ProjectionType = ProjectionType::XZ_Projection;
+	if (maxAxis == maxZ) m_ProjectionType = ProjectionType::YZ_Projection;
 
-	vertexOutBuffer[index].lightmapperPosition =
-		glm::vec4
+	m_LightmapCoords.resize(vertices.size());
+	for (int i = 0; i < m_LightmapCoords.size(); ++i)
 	{
-		((normDeviceCoordinates.x + 1) / 2) * size,
-		((1 - normDeviceCoordinates.y) / 2) * size,
-		normDeviceCoordinates.z,
-		projectedVertex.w
-	};
-	vertexOutBuffer[index].uv = vertexInBuffer[index].uv;
+		switch (m_ProjectionType)
+		{
+		case ProjectionType::XY_Projection:
+			XYProjection(m_LightmapCoords[i], vertices[i]);
+			break;
+		case ProjectionType::XZ_Projection:
+			XZProjection(m_LightmapCoords[i], vertices[i]);
+			break;
+		case ProjectionType::YZ_Projection:
+			YZProjection(m_LightmapCoords[i], vertices[i]);
+			break;
+		}
+	}
+
+
 }
 
-void DirectionalLightRender(DirectionalLight light, uint32_t* buffer)
+void LightRasterizer::XYProjection(glm::vec2& lighmapCoords, Vertex& vertex)
 {
-	int vertexBlockSize = VERTBLOCKSIZE, fragmentBlockSize = FRAGBLOCKSIZE;
-	int vertexGridSize = (g_VertCount + VERTBLOCKSIZE - 1) / VERTBLOCKSIZE;
+	lighmapCoords.x = vertex.position.x;
+	lighmapCoords.y = vertex.position.y;
+}
 
-	glm::mat4 matrix = glm::ortho(0.0f, 1000.f, 0.0f, 1000.f);
+void LightRasterizer::XZProjection(glm::vec2& lighmapCoords, Vertex& vertex)
+{
+	lighmapCoords.x = vertex.position.x;
+	lighmapCoords.y = vertex.position.z;
+}
 
-
-	glm::vec3 right = glm::normalize(glm::cross(light.direction, glm::vec3{ 0,1,0 }));
-	glm::vec3 up = glm::normalize(glm::cross(right, light.direction));
-
-	glm::mat4 worldMatrix = glm::lookAt(-light.direction * 100.0f, (-light.direction * 100.0f) + light.direction, up);
-
-	VertexShader << <vertexGridSize, vertexBlockSize >> > (g_LightmapSize, g_pVerteInBuffer, g_pVerteOutBuffer, worldMatrix, matrix);
+void LightRasterizer::YZProjection(glm::vec2& lighmapCoords, Vertex& vertex)
+{
+	lighmapCoords.x = vertex.position.y;
+	lighmapCoords.y = vertex.position.z;
 }
