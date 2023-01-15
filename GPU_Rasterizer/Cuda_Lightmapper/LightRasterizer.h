@@ -14,7 +14,7 @@ enum class ProjectionType
 class LightRasterizer
 {
 public:
-	void MapVerticesToCoords(std::vector<Vertex>& vertices);
+	void MapVerticesToCoords(Vertex v0, Vertex v1, Vertex v2);
 
 private:
 	void XYProjection(glm::vec2& lighmapCoords, Vertex& vertex);
@@ -22,6 +22,7 @@ private:
 	void YZProjection(glm::vec2& lighmapCoords, Vertex& vertex);
 
 	std::vector<glm::vec2> m_LightmapCoords;
+	int m_Lightmaps = 0;
 
 	ProjectionType m_ProjectionType;
 };

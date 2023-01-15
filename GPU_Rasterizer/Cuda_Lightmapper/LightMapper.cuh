@@ -73,5 +73,3 @@ void InitLightMap(int size = 128)
 	cudaMalloc(&g_pLightmap, size * size * sizeof(uint32_t));
 	cudaMemset(g_pLightmap, 0, size * size * sizeof(uint32_t));
 }
-
-void GenerateLightMap(const std::vector<Mesh*>& pMeshes);

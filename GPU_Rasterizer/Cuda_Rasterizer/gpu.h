@@ -39,6 +39,14 @@ struct Vertex_Out
 	glm::vec2 uv;
 };
 
+struct Fragment
+{
+	glm::vec3 screenPosition;
+	glm::vec3 normal;
+	glm::vec3 color;
+	glm::vec2 uv;
+};
+
 struct depthInfo
 {
 	float depth;
@@ -52,6 +60,9 @@ struct BoundingBox {
 struct Triangle {
 	Vertex_Out v[3];
 	BoundingBox boundingBox;
+
+	float weights[3];
+
 	bool visible;
 };
 

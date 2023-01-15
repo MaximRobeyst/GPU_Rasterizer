@@ -68,6 +68,7 @@
     <ClInclude Include="LightRasterizer.h">
       <Filter>CUDA</Filter>
     </ClInclude>
+    <ClInclude Include="stb_image_write.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\fragment.fs">

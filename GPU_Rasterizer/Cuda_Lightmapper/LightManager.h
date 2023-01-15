@@ -1,6 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <vector>
+#include "LightRasterizer.h"
 
 struct PointLight
 {
@@ -27,8 +28,13 @@ public:
 	void AddPointLight(PointLight pointLight);
 	void SetDirectionalLight(DirectionalLight directionalLight);
 
-	void GenerateLightmap();
+	int GetNumberOfPointLights() const;
+	PointLight GetPointLight(int i) const;
+
+	void GenerateLightmap(const std::vector<Mesh*>pMeshes);
 private:
+	LightRasterizer m_LightRasterizer{};
+
 	static LightManager* m_pLightMapper;
 
 	int m_LightmapSize = 128;

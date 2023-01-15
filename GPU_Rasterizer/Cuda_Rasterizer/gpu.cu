@@ -27,17 +27,18 @@ static int g_VertCount;
 
 static TextureData* g_pTexture = NULL;
 
+// Fragment
+static Fragment* g_pFragmentBuffer = NULL;
+
 // inde buffer
 static int* g_pIndeBuffer;
 static int g_IndeCount;
 
-static int* dev_mutex = NULL;
-
 // Triangle Buffer
 static Triangle* dev_primitives = NULL;
-static int primitiveCount = 0;
+static int g_primitiveCount = 0;
 
-static depthInfo* g_DepthBuffer;
+static int* g_DepthBuffer;
 
 static int g_TextureWidth;
 static int g_TextureHeight;
@@ -60,7 +61,7 @@ void InitBuffers(Vertex_In* vertices, int vertCount,const std::vector<unsigned i
 
 	g_VertCount = vertCount;
 	g_IndeCount = indices.size();
-	primitiveCount = g_VertCount / 3;
+	g_primitiveCount = g_VertCount / 3;
 
 	g_WorldMatrix = worldMatrix;
 
@@ -103,11 +104,6 @@ void InitBuffers(Vertex_In* vertices, int vertCount,const std::vector<unsigned i
 	cudaFree(dev_primitives);
 	cudaMalloc(&dev_primitives, g_VertCount / 3 * sizeof(Triangle));
 	cudaMemset(dev_primitives, 0, g_VertCount / 3 * sizeof(Triangle));
-
-	// Mutex
-	err = cudaFree(dev_mutex);
-	err = cudaMalloc(&dev_mutex, SCREEN_SIZE * sizeof(int));
-	err = cudaMemset(dev_mutex, 0, SCREEN_SIZE * sizeof(int));
 
 	if (textures.empty())
 	{
@@ -185,22 +181,12 @@ void ClearScreenGPU(uint32_t* screen, glm::vec3 color)
 
 void ClearScreen(uint32_t* src, glm::vec3 clearColor)
 {
-	int sideLength2d = 8;
-	dim3 blockSize2d(sideLength2d, sideLength2d);
-	dim3 blockCount2d((SCREEN_WIDTH + blockSize2d.x - 1) / blockSize2d.x,
-		(SCREEN_HEIGHT + blockSize2d.y - 1) / blockSize2d.y);
-
-	int vertexBlockSize = VERTBLOCKSIZE, fragmentBlockSize = FRAGBLOCKSIZE;
-	int vertexGridSize = (g_VertCount + VERTBLOCKSIZE - 1) / VERTBLOCKSIZE;
-
 	const dim3 blocksPerGrid(H_TILES, V_TILES);
 	const dim3 threadsPerBlock(TILE_WIDTH, TILE_HEIGHT);
 
-	int w = static_cast<int>(SCREEN_WIDTH);
-	int h = static_cast<int>(SCREEN_HEIGHT);
-
 	// Clear depth buffer
 	ClearScreenGPU << <blocksPerGrid, threadsPerBlock >> > (src, clearColor);
+	checkCUDAError("ClearScreen");
 }
 
 int gpuBlit(void* src, void* dst)
@@ -225,24 +211,37 @@ void VerteShading(int w, int h, float far, float near, int verteCount, const Ver
 {
 	int index = ((blockIdx.x * blockDim.x) + threadIdx.x) + (((blockIdx.y * blockDim.y) + threadIdx.y) * w);
 
-	if (index >= verteCount) return;
-
-	glm::vec4 projectedVertex = projectionMatrix * worldToView * meshWorldMatrix * glm::vec4(verteInBuffer[index].position, 1.0f);
-
-	glm::vec3 normDeviceCoordinates = glm::vec3(projectedVertex.x, projectedVertex.y, projectedVertex.z) / projectedVertex.w;
-
-	verteOutBuffer[index].screenPosition =
-		glm::vec4
+	if (index < verteCount)
 	{
-		((normDeviceCoordinates.x + 1) / 2) * w,
-		((1 - normDeviceCoordinates.y) / 2) * h,
-		normDeviceCoordinates.z,
-		projectedVertex.w
-	};
-	verteOutBuffer[index].normal = glm::normalize(meshWorldMatrix * glm::vec4{ verteInBuffer[index].normal, 0.0f });
-	verteOutBuffer[index].tangent = glm::normalize(meshWorldMatrix * glm::vec4{ verteInBuffer[index].tangent, 0.0f });
-	verteOutBuffer[index].color = verteInBuffer[index].color;
-	verteOutBuffer[index].uv = verteInBuffer[index].uv;
+		glm::vec4 projectedVertex = projectionMatrix * worldToView * meshWorldMatrix * glm::vec4(verteInBuffer[index].position, 1.0f);
+
+		glm::vec3 normDeviceCoordinates = glm::vec3(projectedVertex.x, projectedVertex.y, projectedVertex.z) / projectedVertex.w;
+
+		verteOutBuffer[index].screenPosition =
+			glm::vec4
+		{
+			((normDeviceCoordinates.x + 1) / 2) * w,
+			((1 - normDeviceCoordinates.y) / 2) * h,
+			normDeviceCoordinates.z,
+			projectedVertex.w
+		};
+		verteOutBuffer[index].normal = glm::normalize(meshWorldMatrix * glm::vec4{ verteInBuffer[index].normal, 0.0f });
+		verteOutBuffer[index].tangent = glm::normalize(meshWorldMatrix * glm::vec4{ verteInBuffer[index].tangent, 0.0f });
+		verteOutBuffer[index].color = verteInBuffer[index].color;
+		verteOutBuffer[index].uv = verteInBuffer[index].uv;
+	}
+}
+
+__inline__
+__device__
+float clamp(float value, float min, float max)
+{
+	if (value < min)
+		return min;
+	if (value > max)
+		return max;
+
+	return value;
 }
 
 __global__
@@ -258,15 +257,15 @@ void AssemblePrimitives(int primitiveCount, const Vertex_Out* vertexBufferOut, T
 		}
 
 		primitives[index].boundingBox.min = glm::vec3{
-			min(0.0f, min(primitives[index].v[0].screenPosition.x, min(primitives[index].v[1].screenPosition.x, primitives[index].v[2].screenPosition.x))),
-			min(0.0f, min(primitives[index].v[0].screenPosition.y, min(primitives[index].v[1].screenPosition.y, primitives[index].v[2].screenPosition.y))),
-			min(0.0f, min(primitives[index].v[0].screenPosition.z, min(primitives[index].v[1].screenPosition.z, primitives[index].v[2].screenPosition.z))),
+			clamp(min(primitives[index].v[0].screenPosition.x, min(primitives[index].v[1].screenPosition.x, primitives[index].v[2].screenPosition.x)), 0.0f, static_cast<float>(SCREEN_WIDTH)),
+			clamp(min(primitives[index].v[0].screenPosition.y, min(primitives[index].v[1].screenPosition.y, primitives[index].v[2].screenPosition.y)), 0.0f, static_cast<float>(SCREEN_HEIGHT)),
+			min(primitives[index].v[0].screenPosition.z, min(primitives[index].v[1].screenPosition.z, primitives[index].v[2].screenPosition.z))
 		};
 
 		primitives[index].boundingBox.max = glm::vec3{
-			max(static_cast<float>(SCREEN_WIDTH), max(primitives[index].v[0].screenPosition.x, max(primitives[index].v[1].screenPosition.x, primitives[index].v[2].screenPosition.x))),
-			max(static_cast<float>(SCREEN_HEIGHT), max(primitives[index].v[0].screenPosition.y, max(primitives[index].v[1].screenPosition.y, primitives[index].v[2].screenPosition.y))),
-			max(1.0f, max(primitives[index].v[0].screenPosition.z, max(primitives[index].v[1].screenPosition.z, primitives[index].v[2].screenPosition.z))),
+			clamp(max(primitives[index].v[0].screenPosition.x, max(primitives[index].v[1].screenPosition.x, primitives[index].v[2].screenPosition.x)), 0.0f, static_cast<float>(SCREEN_WIDTH)),
+			clamp(max(primitives[index].v[0].screenPosition.y, max(primitives[index].v[1].screenPosition.y, primitives[index].v[2].screenPosition.y)), 0.0f, static_cast<float>(SCREEN_HEIGHT)),
+			max(primitives[index].v[0].screenPosition.z, max(primitives[index].v[1].screenPosition.z, primitives[index].v[2].screenPosition.z))
 		};
 
 		bool visible = true;
@@ -320,100 +319,51 @@ glm::vec3 TextureSample(TextureData* textures, glm::vec2 uv, int width, int heig
 	return color;
 }
 
-__device__ float fAtomicMin(float* addr, float value)
-{
-	float old = *addr, assumed;
-
-	if (old <= value) return old;
-
-	do
-	{
-		assumed = old;
-		old = atomicCAS((unsigned int*)addr, __float_as_int(assumed), __float_as_int(value));
-	} while (old != assumed);
-	return old;
-}
-
-__device__
-static
-bool getPixColor(int x, int y, depthInfo* pixelDepth, glm::vec3* color, Triangle primitive, TextureData* textures, int textureWidth, int textureHeight, int channels)
-{
-	float weights[3];
-	float totalTriangleArea = abs(Cross(glm::vec2{ primitive.v[0].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }, glm::vec2{ primitive.v[1].screenPosition } - glm::vec2{ primitive.v[2].screenPosition }));
-
-	glm::vec2 pixel{ x, y };
-
-	for (int i = 0; i < 3; ++i)
-	{
-		if (primitive.v[i].screenPosition.z < 0.f || primitive.v[i].screenPosition.z > 1.f) return false;
-		//else if (p.x > screenWidth || p.y > screenHeight || p.x < 0 || p.y < 0) return false;
-	}
-
-	for (size_t i = 0; i < 3; ++i)
-	{
-		glm::vec2 p1{ primitive.v[(i + 2) % 3].screenPosition };
-		glm::vec2 p2{ primitive.v[i].screenPosition };
-
-		glm::vec2 edge = p1 - p2;
-		glm::vec2 pointToSide = pixel - p2;
-		if (Cross(edge, pointToSide) < 0)
-			return false;
-
-		weights[i] = Cross(
-			pixel - glm::vec2{ primitive.v[(i + 1) % 3].screenPosition },
-			glm::vec2(glm::vec2{ primitive.v[(i + 2) % 3].screenPosition } - glm::vec2{ primitive.v[(i + 1) % 3].screenPosition })
-		) / totalTriangleArea;
-	}
-
-	float currentDepth{};
-	for (size_t i = 0; i < 3; ++i)
-		currentDepth += (1.f / primitive.v[i].screenPosition.z) * weights[i];
-	currentDepth = 1.f / currentDepth;
-
-	if (pixelDepth[0].depth < currentDepth)
-		return false;
-	pixelDepth[0].depth = currentDepth;
-
-	Vertex_Out endValue;
-	float wInterpolated{};
-
-	for (int i = 0; i < 3; ++i)
-	{
-		wInterpolated += (1.0f / primitive.v[i].screenPosition.w) * weights[i];
-
-		endValue.normal += (primitive.v[i].normal) * weights[i];
-		endValue.tangent += (primitive.v[i].tangent) * weights[i];
-		endValue.color += primitive.v[i].color * weights[i];
-		endValue.uv += (primitive.v[i].uv / primitive.v[i].screenPosition.w) * weights[i];
-	}
-
-	endValue.uv *= (1.0f / wInterpolated);
-	endValue.normal = glm::normalize((endValue.normal / 3.f));
-	endValue.tangent = glm::normalize((endValue.tangent / 3.f));
-
-	glm::vec3 endColor = endValue.color;
-
-	if (textures != nullptr)
-		endColor = TextureSample(textures, endValue.uv, textureWidth, textureHeight, channels) * endColor;
-
-	//lighting
-	glm::vec3 lightDirection{ -.577f, .577f, .577f };
-	glm::vec3 lightColor{ 1.f,1.f,1.f };
-	float intensity{ 2.f };
-
-	// ambient
-	glm::vec3 ambientColor{ 0.05f, 0.05f, 0.05f };
-
-	float observedArea = max(0.0f, (glm::dot(endValue.normal, lightDirection)));
-
-	glm::vec3 shadedEndColor{};
-
-	shadedEndColor = lightColor * intensity * endColor * observedArea;
-	shadedEndColor += ambientColor;
-
-	color[0] = MaxToOne(shadedEndColor);
-	return true;
-}
+//__device__
+//static
+//bool getPixColor(int x, int y, int* pixelDepth, glm::vec3* color, Triangle primitive, TextureData* textures, int textureWidth, int textureHeight, int channels)
+//{
+//
+//	Vertex_Out endValue;
+//	float wInterpolated{};
+//
+//	for (int i = 0; i < 3; ++i)
+//	{
+//		wInterpolated += (1.0f / primitive.v[i].screenPosition.w) * weights[i];
+//
+//		endValue.normal += (primitive.v[i].normal) * weights[i];
+//		endValue.tangent += (primitive.v[i].tangent) * weights[i];
+//		endValue.color += primitive.v[i].color * weights[i];
+//		endValue.uv += (primitive.v[i].uv / primitive.v[i].screenPosition.w) * weights[i];
+//	}
+//
+//	endValue.uv *= (1.0f / wInterpolated);
+//	endValue.normal = glm::normalize((endValue.normal / 3.f));
+//	endValue.tangent = glm::normalize((endValue.tangent / 3.f));
+//
+//	glm::vec3 endColor = endValue.color;
+//
+//	if (textures != nullptr)
+//		endColor = TextureSample(textures, endValue.uv, textureWidth, textureHeight, channels) * endColor;
+//
+//	//lighting
+//	glm::vec3 lightDirection{ -.577f, .577f, .577f };
+//	glm::vec3 lightColor{ 1.f,1.f,1.f };
+//	float intensity{ 2.f };
+//
+//	// ambient
+//	glm::vec3 ambientColor{ 0.05f, 0.05f, 0.05f };
+//
+//	float observedArea = max(0.0f, (glm::dot(endValue.normal, lightDirection)));
+//
+//	glm::vec3 shadedEndColor{};
+//
+//	shadedEndColor = lightColor * intensity * endColor * observedArea;
+//	shadedEndColor += ambientColor;
+//
+//	color[0] = MaxToOne(shadedEndColor);
+//	return true;
+//}
 
 __device__
 glm::vec3 ConvertUint32ToRGB(uint32_t pixel)
@@ -436,114 +386,185 @@ glm::vec3 ConvertUint32ToRGB(uint32_t pixel)
 
 // per pixel
 __global__
-void FragmentShading(uint32_t* buf, depthInfo* depthBuf, const Triangle* primitives, int primitiveCount, TextureData* textures, int textureWidth, int textureHeight, int channels)
+void FragmentShading(uint32_t* buf, Fragment* pFragmentBuffer, TextureData* textures, int textureWidth, int textureHeight, int channels)
 {
 	const int xPix = blockDim.x * blockIdx.x + threadIdx.x;
 	const int yPix = blockDim.y * blockIdx.y + threadIdx.y;
 
-	unsigned int pos = SCREEN_WIDTH * yPix + xPix;
+	unsigned int pos = yPix * SCREEN_WIDTH + xPix;
 
-	glm::vec3 color = ConvertUint32ToRGB(buf[pos]);
-	//depthInfo depth{ 1.0f };
-	for (int i = 0; i < primitiveCount; ++i)
+	if (pos < SCREEN_SIZE)
 	{
-		if (xPix < primitives[i].boundingBox.min.x || xPix > primitives[i].boundingBox.max.x) continue;
-		if (yPix < primitives[i].boundingBox.min.y || yPix > primitives[i].boundingBox.max.y) continue;
+		Fragment fragment = pFragmentBuffer[pos];
 
-		if (!primitives[i].visible) continue;
+		glm::vec3 endColor = fragment.color;
 
-		if (!getPixColor(xPix, yPix, &depthBuf[pos], &color, primitives[i], textures, textureWidth, textureHeight, channels))
-			continue;
+		if (textures != nullptr)
+			endColor = TextureSample(textures, fragment.uv, textureWidth, textureHeight, channels) * endColor;
+
+		//lighting
+		glm::vec3 lightDirection{ -.577f, .577f, .577f };
+		glm::vec3 lightColor{ 1.f,1.f,1.f };
+		float intensity{ 2.f };
+
+		// ambient
+		glm::vec3 ambientColor{ 0.05f, 0.05f, 0.05f };
+
+		float observedArea = max(0.0f, (glm::dot(fragment.normal, lightDirection)));
+
+		glm::vec3 shadedEndColor{};
+
+		shadedEndColor = lightColor * intensity * endColor * observedArea;
+		shadedEndColor += ambientColor;
+
+		endColor = MaxToOne(shadedEndColor);
+
+		buf[pos] = (uint8_t)(endColor.b * 255.0f) | ((uint8_t)(endColor.g * 255) << 8) | ((uint8_t)(endColor.r * 255) << 16) | (uint8_t)(255.0f) << 24;
 	}
-
-	buf[pos] = (uint8_t)(color.b * 255.0f) | ((uint8_t)(color.g * 255) << 8) | ((uint8_t)(color.r * 255) << 16) | (uint8_t)(255.0f) << 24;
 }
 
-// per polygon
+__device__
+bool PixelInTriangle(Triangle* primitive, glm::vec2 pixel)
+{
+	float totalTriangleArea = abs(Cross(glm::vec2{ primitive->v[0].screenPosition } - glm::vec2{ primitive->v[2].screenPosition }, glm::vec2{ primitive->v[1].screenPosition } - glm::vec2{ primitive->v[2].screenPosition }));
+
+	for (int i = 0; i < 3; ++i)
+	{
+		if (primitive->v[i].screenPosition.z < 0.f || primitive->v[i].screenPosition.z > 1.f) return false;
+	}
+
+
+	for (size_t i = 0; i < 3; ++i)
+	{
+		glm::vec2 p1{ primitive->v[(i + 2) % 3].screenPosition };
+		glm::vec2 p2{ primitive->v[i].screenPosition };
+
+		glm::vec2 edge = p1 - p2;
+		glm::vec2 pointToSide = pixel - p2;
+		if (Cross(edge, pointToSide) < 0)
+			return false;
+
+		primitive->weights[i] = Cross(
+			pixel - glm::vec2{ primitive->v[(i + 1) % 3].screenPosition },
+			glm::vec2(glm::vec2{ primitive->v[(i + 2) % 3].screenPosition } - glm::vec2{ primitive->v[(i + 1) % 3].screenPosition })
+		) / totalTriangleArea;
+	}
+
+	return true;
+}
+
+__device__
+float getDepthAtPixel(Triangle primitive)
+{
+	float currentDepth{};
+	for (size_t i = 0; i < 3; ++i)
+		currentDepth += (1.f / primitive.v[i].screenPosition.z) * primitive.weights[i];
+	currentDepth = 1.f / currentDepth;
+
+	return currentDepth;
+}
+
+__device__
+Fragment InterpolatePrimitiveValues(Triangle primitive)
+{
+	Fragment endValue;
+	float wInterpolated{};
+
+	for (int i = 0; i < 3; ++i)
+	{
+		wInterpolated += (1.0f / primitive.v[i].screenPosition.w) * primitive.weights[i];
+
+		endValue.screenPosition += glm::vec3{ primitive.v[i].screenPosition } *primitive.weights[i];
+		endValue.normal += (primitive.v[i].normal) * primitive.weights[i];
+		//endValue.tangent += (primitive.v[i].tangent) * weights[i];
+		endValue.color += primitive.v[i].color * primitive.weights[i];
+		endValue.uv += (primitive.v[i].uv / primitive.v[i].screenPosition.w) * primitive.weights[i];
+	}
+
+	endValue.screenPosition /= 3.0f;
+	endValue.uv *= (1.0f / wInterpolated);
+	endValue.normal = glm::normalize((endValue.normal / 3.f));
+	//endValue.tangent = glm::normalize((endValue.tangent / 3.f));
+
+	return endValue;
+}
+
 __global__
-void FragmentShadingPolygon(uint32_t* buf, depthInfo* depthBuf, const Triangle* primitives, int primitiveCount, TextureData* textures, int textureWidth, int textureHeight, int channels, int* dev_mutex)
+void Rasterize(Triangle* primitives, int primitveCount, Fragment* pFragmentBuffer, int* pDepthBuffer)
 {
 	int index = (blockIdx.x * blockDim.x) + threadIdx.x;
 
-	if (index >= primitiveCount)return;
-	//if (!primitives[index].visible) return;
-
-	BoundingBox aabb = primitives[index].boundingBox;
-
-	for (int xPixel = aabb.min.x; xPixel <= aabb.max.x; ++xPixel)
+	if (index < primitveCount)
 	{
-		for (int yPixel = aabb.min.y; yPixel <= aabb.max.y; ++yPixel)
+		BoundingBox aabb = primitives[index].boundingBox;
+
+		for (int xPixel = aabb.min.x; xPixel <= aabb.max.x; ++xPixel)
 		{
-			unsigned int pos = SCREEN_WIDTH * yPixel + xPixel;
+			for (int yPixel = aabb.min.y; yPixel <= aabb.max.y; ++yPixel)
+			{
+				int depthIndex = yPixel * SCREEN_WIDTH + xPixel;
 
-			//glm::vec3 color = ConvertUint32ToRGB(buf[pos]);
-			//
-			//getPixColor(xPixel, yPixel, &depthBuf[pos], &color, primitives[index], textures, textureWidth, textureHeight, channels);
+				glm::vec3 position;
+				if (!PixelInTriangle(&primitives[index], glm::vec2{ xPixel, yPixel })) continue;
+				int depthRepresentation = getDepthAtPixel(primitives[index]) * INT_MAX;
 
-			bool isLocked = false;
-			
-			//do
-			//{
-			//	isLocked = (atomicCAS(&dev_mutex[pos], 0, 1) == 0);
-			
-				glm::vec3 color = ConvertUint32ToRGB(buf[pos]);
-			
-				getPixColor(xPixel, yPixel, &depthBuf[pos], &color, primitives[index], textures, textureWidth, textureHeight, channels);
-			
-			//	if (isLocked)
-			//		dev_mutex[pos] = 0;
-			//} while (!isLocked);
+				atomicMin(&pDepthBuffer[depthIndex], depthRepresentation);
+
+				if (pDepthBuffer[depthIndex] == depthRepresentation)
+				{
+					pFragmentBuffer[depthIndex] = InterpolatePrimitiveValues(primitives[index]);
+				}
+			}
 		}
 	}
 }
 
 __global__
-void ClearDepthBufferGPU(depthInfo* depthBuf)
+void ClearDepthBufferGPU(int* depthBuf)
 {
 	const int xPix = blockDim.x * blockIdx.x + threadIdx.x;
 	const int yPix = blockDim.y * blockIdx.y + threadIdx.y;
 
 	unsigned int pos = SCREEN_WIDTH * yPix + xPix;
 
-	depthBuf[pos].depth = 1.0f;
+	if (pos < SCREEN_SIZE) 
+	{
+		depthBuf[pos] = INT_MAX;
+	}
 }
+
 void ClearDepthBuffer()
 {
-	if (g_DepthBuffer == NULL)
+	cudaError_t err;
+	if (g_DepthBuffer == NULL || g_pFragmentBuffer == NULL)
 	{
-		cudaError_t err = cudaFree(g_DepthBuffer);
+		err = cudaFree(g_DepthBuffer);
 		if (err != cudaSuccess)
 			std::cout << "error with freeing memory g_DepthBuffer" << std::endl;
 
-		err = cudaMalloc(&g_DepthBuffer, SCREEN_SIZE * sizeof(depthInfo));
+		err = cudaMalloc(&g_DepthBuffer, SCREEN_SIZE * sizeof(int));
 		if (err != cudaSuccess)
 			std::cout << "error allocating memory for g_DepthBuffer" << std::endl;
 
-		err = cudaMemset(g_DepthBuffer, 0, SCREEN_SIZE * sizeof(depthInfo));
+		err = cudaMemset(g_DepthBuffer, 0, SCREEN_SIZE * sizeof(int));
 		if (err != cudaSuccess)
 			std::cout << "error with copying memory g_DepthBuffer" << std::endl;
+
+		err = cudaFree(g_pFragmentBuffer);
+		err = cudaMalloc(&g_pFragmentBuffer, SCREEN_SIZE * sizeof(Fragment));
 	}
-
-
-	int sideLength2d = 8;
-	dim3 blockSize2d(sideLength2d, sideLength2d);
-	dim3 blockCount2d((SCREEN_WIDTH + blockSize2d.x - 1) / blockSize2d.x,
-		(SCREEN_HEIGHT + blockSize2d.y - 1) / blockSize2d.y);
-
-	int vertexBlockSize = VERTBLOCKSIZE, fragmentBlockSize = FRAGBLOCKSIZE;
-	int vertexGridSize = (g_VertCount + VERTBLOCKSIZE - 1) / VERTBLOCKSIZE;
 
 	const dim3 blocksPerGrid(H_TILES, V_TILES);
 	const dim3 threadsPerBlock(TILE_WIDTH, TILE_HEIGHT);
 
-	int w = static_cast<int>(SCREEN_WIDTH);
-	int h = static_cast<int>(SCREEN_HEIGHT);
+	err = cudaMemset(g_pFragmentBuffer, 0, SCREEN_SIZE * sizeof(Fragment));
 
 	// Clear depth buffer
 	ClearDepthBufferGPU << <blocksPerGrid, threadsPerBlock >> > (g_DepthBuffer);
+	checkCUDAError("ClearDepthBuffer");
 }
 
-//#define TIMER
+#define TIMER
 
 // Rasterizer loop
 void gpuRender(uint32_t* buf) 
@@ -555,7 +576,7 @@ void gpuRender(uint32_t* buf)
 
 	int vertexBlockSize = VERTBLOCKSIZE, fragmentBlockSize = FRAGBLOCKSIZE;
 	int vertexGridSize = (g_VertCount + VERTBLOCKSIZE - 1) / VERTBLOCKSIZE;
-	int fragmentGridSize = (primitiveCount + FRAGBLOCKSIZE - 1) / FRAGBLOCKSIZE;
+	int fragmentGridSize = (SCREEN_SIZE + FRAGBLOCKSIZE - 1) / FRAGBLOCKSIZE;
 
 	const dim3 blocksPerGrid(H_TILES, V_TILES);
 	const dim3 threadsPerBlock(TILE_WIDTH, TILE_HEIGHT);
@@ -571,6 +592,10 @@ void gpuRender(uint32_t* buf)
 	cudaEventCreate(&startPrimitiveAssambly);
 	cudaEventCreate(&stopPrimitiveAssambly);
 
+	cudaEvent_t startRasterizer, stopRasterizer;
+	cudaEventCreate(&startRasterizer);
+	cudaEventCreate(&stopRasterizer);
+
 	cudaEvent_t startFragmentShading, stopFragmentShading;
 	cudaEventCreate(&startFragmentShading);
 	cudaEventCreate(&stopFragmentShading);
@@ -578,9 +603,9 @@ void gpuRender(uint32_t* buf)
 
 	// Vertex shading
 #ifdef TIMER
-	cudaEventRecord(startVertexShading);
+	cudaEventRecord(startRasterizer);
 	VerteShading << <vertexGridSize, vertexBlockSize >> > (w, h, g_pCamera->GetFar(), g_pCamera->GetNear(), g_VertCount, g_pVerteInBuffer, g_pVerteOutBuffer, g_pCamera->GetViewMatrix(), g_pCamera->GetProjectionMatrix(), g_WorldMatrix);
-	cudaEventRecord(stopVertexShading);
+	cudaEventRecord(stopRasterizer);
 #else
 	VerteShading << <vertexGridSize, vertexBlockSize >> > (w, h, g_pCamera->GetFar(), g_pCamera->GetNear(), g_VertCount, g_pVerteInBuffer, g_pVerteOutBuffer, g_pCamera->GetViewMatrix(), g_pCamera->GetProjectionMatrix(), g_WorldMatrix);
 #endif // TIMER
@@ -588,36 +613,37 @@ void gpuRender(uint32_t* buf)
 	// Primitive Assembly
 #ifdef TIMER
 	cudaEventRecord(startPrimitiveAssambly);
-	AssemblePrimitives << <vertexGridSize, vertexBlockSize >> > (primitiveCount, g_pVerteOutBuffer, dev_primitives, g_pIndeBuffer);
+	AssemblePrimitives << <vertexGridSize, vertexBlockSize >> > (g_primitiveCount, g_pVerteOutBuffer, dev_primitives, g_pIndeBuffer);
 	cudaEventRecord(stopPrimitiveAssambly);
 #else
-	AssemblePrimitives << <vertexGridSize, vertexBlockSize >> > (primitiveCount, g_pVerteOutBuffer, dev_primitives, g_pIndeBuffer);
+	AssemblePrimitives << <vertexGridSize, vertexBlockSize >> > (g_primitiveCount, g_pVerteOutBuffer, dev_primitives, g_pIndeBuffer);
 #endif // TIMER
 
 	// Culling 
 
 
 	// Rasterization
+
+#ifdef TIMER
+	cudaEventRecord(startRasterizer);
+	Rasterize<<<blockCount2d, blockSize2d >>>(dev_primitives, g_primitiveCount, g_pFragmentBuffer, g_DepthBuffer);
+	cudaEventRecord(stopRasterizer);
+#else
+	Rasterize << <blockCount2d, blockSize2d >> > (dev_primitives, g_primitiveCount, g_pFragmentBuffer, g_DepthBuffer);
+#endif // TIMER
+
 #ifdef TIMER
 	cudaEventRecord(startFragmentShading);
-	FragmentShading << <blocksPerGrid, threadsPerBlock >> > (buf, g_DepthBuffer, dev_primitives, primitiveCount, g_pTexture, g_TextureWidth, g_TextureHeight, g_TextureChannels);
+	FragmentShading << <fragmentGridSize, fragmentBlockSize >> > (buf, g_pFragmentBuffer, g_pTexture, g_TextureWidth, g_TextureHeight, g_TextureChannels);
 	cudaEventRecord(stopFragmentShading);
 #else
-
-	//dim3 numThreadsPerBlock(128);
-	//dim3 numBlocksForPrims((primitiveCount + numThreadsPerBlock.x - 1) / numThreadsPerBlock.x);
-
-	FragmentShading << <blocksPerGrid, threadsPerBlock >> > (buf, g_DepthBuffer, dev_primitives, primitiveCount, g_pTexture, g_TextureWidth, g_TextureHeight, g_TextureChannels);
-
-	//FragmentShadingPolygon << <numBlocksForPrims, numThreadsPerBlock >> > (buf, g_DepthBuffer, dev_primitives, primitiveCount, g_pTexture, g_TextureWidth, g_TextureHeight, g_TextureChannels, dev_mutex);
+	FragmentShading << <blocksPerGrid, threadsPerBlock >> > (buf, g_pFragmentBuffer, g_pTexture, g_TextureWidth, g_TextureHeight, g_TextureChannels);
 #endif // TIMER
-	auto err = cudaGetLastError();
-	if (err != cudaSuccess)
-		std::cout << cudaGetErrorString(err) << std::endl;
 
 #ifdef TIMER
 	cudaEventSynchronize(stopVertexShading);
 	cudaEventSynchronize(stopPrimitiveAssambly);
+	cudaEventSynchronize(stopRasterizer);
 	cudaEventSynchronize(stopFragmentShading);
 
 	float millisecondsVertex = 0;
@@ -625,15 +651,17 @@ void gpuRender(uint32_t* buf)
 	float millisecondsPrimitive = 0;
 	cudaEventElapsedTime(&millisecondsPrimitive, startPrimitiveAssambly, stopPrimitiveAssambly);
 	float millisecondsRasterization = 0;
-	cudaEventElapsedTime(&millisecondsRasterization, startFragmentShading, stopFragmentShading);
+	cudaEventElapsedTime(&millisecondsRasterization, startRasterizer, stopRasterizer);
+	float millisecondsFragment = 0;
+	cudaEventElapsedTime(&millisecondsFragment, startFragmentShading, stopFragmentShading);
 
 	std::cout << "Vertexshading milliseconds: " << millisecondsVertex << std::endl;
 	std::cout << "AssemblePrimitives milliseconds: " << millisecondsPrimitive << std::endl;
-	std::cout << "FragmentShading milliseconds: " << millisecondsRasterization << std::endl;
+	std::cout << "Rasterization milliseconds: " << millisecondsRasterization << std::endl;
+	std::cout << "FragmentShading milliseconds: " << millisecondsFragment << std::endl;
 	std::cout << std::endl;
 
 #endif // DEBUG
-
 
 	checkCUDAError("gpuRender");
 }

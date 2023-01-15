@@ -5,8 +5,6 @@ VisualStudioVersion = 17.2.32505.173
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Cuda_Rasterizer", "Cuda_Rasterizer\Cuda_Rasterizer.vcxproj", "{F59E4D39-5A3A-4021-84A9-943C4C568A47}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Cuda_Lightmapper", "Cuda_Lightmapper\Cuda_Lightmapper.vcxproj", "{EF05BC04-5475-447D-912B-3A18F85964C5}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -23,14 +21,6 @@ Global
 		{F59E4D39-5A3A-4021-84A9-943C4C568A47}.Release|x64.Build.0 = Release|x64
 		{F59E4D39-5A3A-4021-84A9-943C4C568A47}.Release|x86.ActiveCfg = Release|x64
 		{F59E4D39-5A3A-4021-84A9-943C4C568A47}.Release|x86.Build.0 = Release|x64
-		{EF05BC04-5475-447D-912B-3A18F85964C5}.Debug|x64.ActiveCfg = Debug|x64
-		{EF05BC04-5475-447D-912B-3A18F85964C5}.Debug|x64.Build.0 = Debug|x64
-		{EF05BC04-5475-447D-912B-3A18F85964C5}.Debug|x86.ActiveCfg = Debug|x64
-		{EF05BC04-5475-447D-912B-3A18F85964C5}.Debug|x86.Build.0 = Debug|x64
-		{EF05BC04-5475-447D-912B-3A18F85964C5}.Release|x64.ActiveCfg = Release|x64
-		{EF05BC04-5475-447D-912B-3A18F85964C5}.Release|x64.Build.0 = Release|x64
-		{EF05BC04-5475-447D-912B-3A18F85964C5}.Release|x86.ActiveCfg = Release|x64
-		{EF05BC04-5475-447D-912B-3A18F85964C5}.Release|x86.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

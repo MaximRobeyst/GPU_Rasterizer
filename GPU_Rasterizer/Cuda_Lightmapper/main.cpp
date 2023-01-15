@@ -36,6 +36,9 @@ void processInput(GLFWwindow* window);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 
+
+std::vector<Mesh*> pMeshes{};
+
 void LoadScene(std::vector<Mesh*>& pMeshes, Material* pMaterial)
 {
 	float groundSize = 10.0f;
@@ -66,27 +69,27 @@ void LoadScene(std::vector<Mesh*>& pMeshes, Material* pMaterial)
 
 	pMeshes.emplace_back(pGroundMesh);
 
-	const int nrOfCrates = 40;
-	for (int i = 0; i < nrOfCrates; ++i)
-	{
-		// Crate Plane
-		Mesh* pCrateMesh = Mesh::CreateCube(1.f, 1.f, 1.f);
-
-		float newx = random(-groundSize, groundSize);
-		float newy = 0.5f;
-		float newz = random(-groundSize, groundSize);
-
-		pCrateMesh->Initialize();
-		Transform* pGroundTransform = new Transform(glm::vec3{ -newx, newy, newz });
-
-		pCrateMesh->SetMaterial(pMaterial);
-		pCrateMesh->AddTexture(new Texture("Resources/Textures/crate.jpg"));
-		pCrateMesh->SetTransform(pGroundTransform);
-
-		pCrateMesh->ReadyTextures();
-
-		pMeshes.emplace_back(pCrateMesh);
-	}
+	//const int nrOfCrates = 40;
+	//for (int i = 0; i < nrOfCrates; ++i)
+	//{
+	//	// Crate Plane
+	//	Mesh* pCrateMesh = Mesh::CreateCube(1.f, 1.f, 1.f);
+	//
+	//	float newx = random(-groundSize, groundSize);
+	//	float newy = 0.5f;
+	//	float newz = random(-groundSize, groundSize);
+	//
+	//	pCrateMesh->Initialize();
+	//	Transform* pGroundTransform = new Transform(glm::vec3{ -newx, newy, newz });
+	//
+	//	pCrateMesh->SetMaterial(pMaterial);
+	//	pCrateMesh->AddTexture(new Texture("Resources/Textures/crate.jpg"));
+	//	pCrateMesh->SetTransform(pGroundTransform);
+	//
+	//	pCrateMesh->ReadyTextures();
+	//
+	//	pMeshes.emplace_back(pCrateMesh);
+	//}
 
 	LightManager::GetLightManager()->AddPointLight(PointLight{ 1.0f, 1.0f, glm::vec3{0.0f,1.0f, 0.0f}, glm::vec3{0.0f, 0.0f, 1.0f} });
 }
@@ -131,8 +134,6 @@ int main()
 
 	Camera* pCamera = new Camera(90.0f, (float)g_WindowWidth / (float)g_WindowHeight, 0.1f, 100.f, new Transform(glm::vec3{ 0,1.f,3.f }));
 	Material* pMaterial = new Material("Shaders/vertex.vs", "Shaders/fragment.fs");
-	
-	std::vector<Mesh*> pMeshes{};
 
 	LoadScene(pMeshes, pMaterial);
 
@@ -253,4 +254,7 @@ void processInput(GLFWwindow* window)
 		Camera::GetMainCamera()->ProcessKeyboard('a', g_DeltaTime);
 	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
 		Camera::GetMainCamera()->ProcessKeyboard('d', g_DeltaTime);
+
+	if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+		LightManager::GetLightManager()->GenerateLightmap(pMeshes);
 }

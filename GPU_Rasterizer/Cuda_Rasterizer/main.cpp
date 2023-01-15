@@ -119,25 +119,25 @@ int main(int /*argc*/, char* /*args*/[]) {
 		5, 4, 3,
 	};
 
-	pMeshes.emplace_back(new Mesh(triangleVertices, indices));
-	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{0.0f,0,0} });
+	//pMeshes.emplace_back(new Mesh(triangleVertices, indices));
+	//pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{0.0f,0,0} });
 
 	Elite::ParseOBJ("Resources/tuktuk.obj", triangleVertices, indices);
 	pMeshes.emplace_back(new Mesh( triangleVertices, indices ));
 	pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/tuktuk.png" });
-	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{-10.0f,-5,0} });
+	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{-0.0f,0.0f,0} });
 
-	Elite::ParseOBJ("Resources/vehicle.obj", triangleVertices, indices);
-	pMeshes.emplace_back(new Mesh(triangleVertices, indices));
-	pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/vehicle_diffuse.png" });
-	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{10.0f,0,0} ,  glm::vec3{0.5f} });
+	//Elite::ParseOBJ("Resources/vehicle.obj", triangleVertices, indices);
+	//pMeshes.emplace_back(new Mesh(triangleVertices, indices));
+	//pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/vehicle_diffuse.png" });
+	//pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{10.0f,0,0} ,  glm::vec3{0.5f} });
 
 	Camera* pCamera = new Camera{ glm::vec3{ 0,0,5.f }, glm::vec3{ 0,0,-1.0f }, 45.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
 
 	//InitBuffers(triangleVertices, indices, textures);
 	float fpsCounter = 0.0f;
 
-	//RastizerDebugger rasterizer{ pCamera, triangleVertices, indices , textures[0]};
+	//RastizerDebugger rasterizer{ pCamera, triangleVertices, indices, pMeshes[pMeshes.size() -1]->GetTextures()[0]};
 	//rasterizer.Render();
 
 	auto t1 = std::chrono::steady_clock::now();
