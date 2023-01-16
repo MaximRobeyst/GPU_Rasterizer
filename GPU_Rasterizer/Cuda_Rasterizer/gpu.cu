@@ -319,52 +319,6 @@ glm::vec3 TextureSample(TextureData* textures, glm::vec2 uv, int width, int heig
 	return color;
 }
 
-//__device__
-//static
-//bool getPixColor(int x, int y, int* pixelDepth, glm::vec3* color, Triangle primitive, TextureData* textures, int textureWidth, int textureHeight, int channels)
-//{
-//
-//	Vertex_Out endValue;
-//	float wInterpolated{};
-//
-//	for (int i = 0; i < 3; ++i)
-//	{
-//		wInterpolated += (1.0f / primitive.v[i].screenPosition.w) * weights[i];
-//
-//		endValue.normal += (primitive.v[i].normal) * weights[i];
-//		endValue.tangent += (primitive.v[i].tangent) * weights[i];
-//		endValue.color += primitive.v[i].color * weights[i];
-//		endValue.uv += (primitive.v[i].uv / primitive.v[i].screenPosition.w) * weights[i];
-//	}
-//
-//	endValue.uv *= (1.0f / wInterpolated);
-//	endValue.normal = glm::normalize((endValue.normal / 3.f));
-//	endValue.tangent = glm::normalize((endValue.tangent / 3.f));
-//
-//	glm::vec3 endColor = endValue.color;
-//
-//	if (textures != nullptr)
-//		endColor = TextureSample(textures, endValue.uv, textureWidth, textureHeight, channels) * endColor;
-//
-//	//lighting
-//	glm::vec3 lightDirection{ -.577f, .577f, .577f };
-//	glm::vec3 lightColor{ 1.f,1.f,1.f };
-//	float intensity{ 2.f };
-//
-//	// ambient
-//	glm::vec3 ambientColor{ 0.05f, 0.05f, 0.05f };
-//
-//	float observedArea = max(0.0f, (glm::dot(endValue.normal, lightDirection)));
-//
-//	glm::vec3 shadedEndColor{};
-//
-//	shadedEndColor = lightColor * intensity * endColor * observedArea;
-//	shadedEndColor += ambientColor;
-//
-//	color[0] = MaxToOne(shadedEndColor);
-//	return true;
-//}
-
 __device__
 glm::vec3 ConvertUint32ToRGB(uint32_t pixel)
 {
@@ -506,7 +460,7 @@ void Rasterize(Triangle* primitives, int primitveCount, Fragment* pFragmentBuffe
 
 				glm::vec3 position;
 				if (!PixelInTriangle(&primitives[index], glm::vec2{ xPixel, yPixel })) continue;
-				int depthRepresentation = getDepthAtPixel(primitives[index]) * INT_MAX;
+				int depthRepresentation = getDepthAtPixel(primitives[index]) * 1000.0f;
 
 				atomicMin(&pDepthBuffer[depthIndex], depthRepresentation);
 
@@ -564,7 +518,7 @@ void ClearDepthBuffer()
 	checkCUDAError("ClearDepthBuffer");
 }
 
-#define TIMER
+//#define TIMER
 
 // Rasterizer loop
 void gpuRender(uint32_t* buf) 
@@ -629,7 +583,7 @@ void gpuRender(uint32_t* buf)
 	Rasterize<<<blockCount2d, blockSize2d >>>(dev_primitives, g_primitiveCount, g_pFragmentBuffer, g_DepthBuffer);
 	cudaEventRecord(stopRasterizer);
 #else
-	Rasterize << <blockCount2d, blockSize2d >> > (dev_primitives, g_primitiveCount, g_pFragmentBuffer, g_DepthBuffer);
+	Rasterize << <vertexGridSize, vertexBlockSize >> > (dev_primitives, g_primitiveCount, g_pFragmentBuffer, g_DepthBuffer);
 #endif // TIMER
 
 #ifdef TIMER
