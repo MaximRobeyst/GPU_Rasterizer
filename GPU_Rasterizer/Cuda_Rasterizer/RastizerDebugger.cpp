@@ -1,25 +1,20 @@
 #include "RastizerDebugger.h"
 #include "Camera.h"
 #include "Texture.h"
+#include "Mesh.h"
+#include "Transform.h"
 
 RastizerDebugger::RastizerDebugger(Camera* pCamera, std::vector<Vertex_In>& vertices, std::vector<unsigned int>& indices, Texture* pTexture)
 	: m_pCamera{pCamera}
-	, m_VerticesIn{vertices}
-	, m_Indices{indices}
 {
-	m_VerticesOut.resize(vertices.size());
-	m_Triangles.resize(vertices.size() / 3);
-	m_Fragments.resize(SCREEN_SIZE);
-
-
 	m_DepthInfo = new int[SCREEN_WIDTH * SCREEN_HEIGHT];
-	m_Buffer = new uint32_t[SCREEN_WIDTH * SCREEN_HEIGHT];
 
-	m_pTexture = pTexture;
+	m_Fragments.resize(SCREEN_SIZE);
 }
 
 void RastizerDebugger::ClearDepthBuffer(int* depthBuf)
 {
+	m_Fragments.resize(SCREEN_SIZE);
 	for (int xPix = 0; xPix < SCREEN_WIDTH; ++xPix)
 	{
 		for (int yPix = 0; yPix < SCREEN_HEIGHT; ++yPix)
@@ -96,7 +91,7 @@ void RastizerDebugger::Rasterize(int primId, Triangle* primitives, int primitveC
 
 				glm::vec3 position;
 				if (!PixelInTriangle(&primitives[index], glm::vec2{ xPixel, yPixel })) continue;
-				int depthRepresentation = getDepthAtPixel(primitives[index]) * INT_MAX;
+				int depthRepresentation = getDepthAtPixel(primitives[index]) * 1000.0f;
 
 				pDepthBuffer[depthIndex] = std::min(pDepthBuffer[depthIndex], depthRepresentation);
 
@@ -143,12 +138,45 @@ void RastizerDebugger::FragmentShade(int x, int y, uint32_t* buf, Fragment* pFra
 	}
 }
 
-void RastizerDebugger::Render()
+void RastizerDebugger::InitBuffers(Camera* pCamera, std::vector<Vertex_In>& vertices, std::vector<unsigned int>& indices, Texture* pTexture, const glm::mat4& worldMatrix)
 {
+	m_VerticesIn.resize(vertices.size());
+	std::copy(vertices.begin(), vertices.end(), m_VerticesIn.begin());
 
+	m_Indices.resize(indices.size());
+	std::copy(indices.begin(), indices.end(), m_Indices.begin());
+
+	m_VerticesOut.resize(vertices.size());
+	m_Triangles.resize(vertices.size() / 3);
+
+	m_pTexture = pTexture;
+}
+
+void RastizerDebugger::Render(uint32_t* screen, std::vector<Mesh*>& meshes)
+{
+	for (int i = 0; i < meshes.size(); ++i)
+	{
+		InitBuffers(m_pCamera, meshes[i]->GetVertices(), meshes[i]->GetIndices(), meshes[i]->GetTextures().size() > 0 ? meshes[i]->GetTextures()[0] : nullptr, meshes[i]->GetTransform()->GetWorldTransform());
+		Render(screen);
+	}
+}
+
+void RastizerDebugger::ClearScreen(uint32_t* screen, glm::vec3 color)
+{
+	for (int x = 0; x < SCREEN_WIDTH; ++x)
+	{
+		for (int y = 0; y < SCREEN_HEIGHT; ++y)
+		{
+			unsigned int pos = SCREEN_WIDTH * y + x;
+			screen[pos] = (uint8_t)(color.b * 255.0f) | ((uint8_t)(color.g * 255) << 8) | ((uint8_t)(color.r * 255) << 16) | (uint8_t)(255.0f) << 24;
+		}
+	}
+}
+
+void RastizerDebugger::Render(uint32_t* screen)
+{
 	int w = static_cast<int>(SCREEN_WIDTH);
 	int h = static_cast<int>(SCREEN_HEIGHT);
-
 
 	// Clear depth buffer
 	ClearDepthBuffer(m_DepthInfo);
@@ -173,7 +201,10 @@ void RastizerDebugger::Render()
 	{
 		for (int y = 0; y < SCREEN_HEIGHT; ++y)
 		{
-			FragmentShade(x,y, m_Buffer, m_Fragments.data(), m_pTexture->GetData(), m_pTexture->GetWidth(), m_pTexture->GetHeight(), m_pTexture->GetChannels());
+			if (m_pTexture == nullptr)
+				FragmentShade(x, y, screen, m_Fragments.data(), nullptr, 0, 0, 0);
+			else
+				FragmentShade(x,y, screen, m_Fragments.data(), m_pTexture->GetData(), m_pTexture->GetWidth(), m_pTexture->GetHeight(), m_pTexture->GetChannels());
 		}
 	}
 

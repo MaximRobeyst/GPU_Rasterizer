@@ -9,24 +9,28 @@
 #include "gpu.h"
 
 class Camera;
+class Mesh;
 
 class RastizerDebugger
 {
 public:
 	RastizerDebugger(Camera* pCamera, std::vector<Vertex_In>& vertices, std::vector<unsigned int>& indices, Texture* pTexture);
 
-
+	void InitBuffers(Camera* pCamera, std::vector<Vertex_In>& vertices, std::vector<unsigned int>& indices, Texture* pTexture,  const glm::mat4& worldMatrix);
+	void Render(uint32_t* screen, std::vector<Mesh*>& meshes);
+	void ClearScreen(uint32_t* screen, glm::vec3 color);
+private:
 	void ClearDepthBuffer(int* depthBuf);
 	void VertexShading(int index, int w, int h, float far, float near, int verteCount, const Vertex_In* verteInBuffer, Vertex_Out* verteOutBuffer, const glm::mat4 worldToView, const glm::mat4 projectionMatrix);
-	void AssamblePrimitives(int inde,int primitiveCount, const Vertex_Out* vertexBufferOut, Triangle* primitives, const unsigned int* bufIdx);
+	void AssamblePrimitives(int inde, int primitiveCount, const Vertex_Out* vertexBufferOut, Triangle* primitives, const unsigned int* bufIdx);
 	void Rasterize(int primId, Triangle* primitives, int primitveCount, Fragment* pFragmentBuffer, int* pDepthBuffer);
 	void FragmentShade(int x, int y, uint32_t* buf, Fragment* pFragmentBuffer, TextureData* textures, int textureWidth, int textureHeight, int channels);
 
-	void Render();
-private:
 	bool PixelInTriangle(Triangle* primitive, glm::vec2 pixel);
 	float getDepthAtPixel(Triangle primitive);
 	Fragment InterpolatePrimitiveValues(Triangle primitive);
+
+	void Render(uint32_t* screen);
 
 	glm::vec3 MaxToOne(const glm::vec3 color);
 
@@ -66,7 +70,7 @@ private:
 	std::vector<Triangle> m_Triangles;
 	
 	int* m_DepthInfo{};
-	uint32_t* m_Buffer{};
+	//uint32_t* m_Buffer{};
 	Texture* m_pTexture;
 
 	Camera* m_pCamera;

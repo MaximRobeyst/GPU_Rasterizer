@@ -137,13 +137,13 @@ int main(int /*argc*/, char* /*args*/[]) {
 	//InitBuffers(triangleVertices, indices, textures);
 	float fpsCounter = 0.0f;
 
-	//RastizerDebugger rasterizer{ pCamera, triangleVertices, indices, pMeshes[pMeshes.size() -1]->GetTextures()[0]};
-	//rasterizer.Render();
+	RastizerDebugger rasterizer{ pCamera, triangleVertices, indices, pMeshes[pMeshes.size() -1]->GetTextures()[0]};
 
 	auto t1 = std::chrono::steady_clock::now();
 
 	float t = 0.0f;
-	bool paused = false;
+	bool paused = true;
+	bool gpu = false;
 
 	while (1)
 	{
@@ -165,15 +165,19 @@ int main(int /*argc*/, char* /*args*/[]) {
 			{
 				if (e.key.keysym.sym == SDLK_p)
 					paused = !paused;
+				if (e.key.keysym.sym == SDLK_r)
+					gpu = !gpu;
 			}
 		}
 
 		pCamera->Update(elapsedSec);
 		for (auto mesh : pMeshes)
 		{
-			if (paused) continue;
-			mesh->GetTransform()->SetRotation(0, t, 0);
-			t += 1.0f * elapsedSec;
+			if (!paused)
+			{
+				mesh->GetTransform()->SetRotation(0, t, 0);
+				t += 1.0f * elapsedSec;
+			}
 		}
 
 		gpuInit(pCamera);
@@ -181,14 +185,27 @@ int main(int /*argc*/, char* /*args*/[]) {
 		SDL_LockSurface(default_screen);
 		ClearDepthBuffer();
 
-		render(default_screen, gpu_Screen, pMeshes);
-		ClearScreen(gpu_Screen, glm::vec3{0.1f});
+		// gpu
+		if (gpu)
+		{
+			render(default_screen, gpu_Screen, pMeshes);
+			ClearScreen(gpu_Screen, glm::vec3{ 0.1f });
+		}
+		else
+		{
+			rasterizer.Render((uint32_t*)default_screen->pixels, pMeshes);
+			// Render gpu_Screen
+		}
+		//rasterizer.Render();
 		SDL_UnlockSurface(default_screen);
 
 		SDL_UpdateTexture(sdlTexture, NULL, default_screen->pixels, default_screen->pitch);
 		SDL_RenderClear(sdlRenderer);
 		SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, NULL);
 		SDL_RenderPresent(sdlRenderer);
+
+		if(!gpu)
+			//rasterizer.ClearScreen((uint32_t*)default_screen->pixels, glm::vec3 { 0.1f });
 
 		if (fpsCounter >= 1.0f)
 		{

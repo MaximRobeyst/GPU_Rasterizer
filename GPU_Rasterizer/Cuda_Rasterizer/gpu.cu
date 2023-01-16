@@ -113,6 +113,8 @@ void InitBuffers(Vertex_In* vertices, int vertCount,const std::vector<unsigned i
 		g_TextureHeight =0;
 		g_TextureChannels = 0;
 
+		cudaFree(g_pTexture);
+
 		checkCUDAError("initBuffers");
 		return;
 	}
@@ -459,14 +461,16 @@ void Rasterize(Triangle* primitives, int primitveCount, Fragment* pFragmentBuffe
 				int depthIndex = yPixel * SCREEN_WIDTH + xPixel;
 
 				glm::vec3 position;
-				if (!PixelInTriangle(&primitives[index], glm::vec2{ xPixel, yPixel })) continue;
-				int depthRepresentation = getDepthAtPixel(primitives[index]) * 1000.0f;
-
-				atomicMin(&pDepthBuffer[depthIndex], depthRepresentation);
-
-				if (pDepthBuffer[depthIndex] == depthRepresentation)
+				if (PixelInTriangle(&primitives[index], glm::vec2{ xPixel, yPixel }))
 				{
-					pFragmentBuffer[depthIndex] = InterpolatePrimitiveValues(primitives[index]);
+					int depthRepresentation = getDepthAtPixel(primitives[index]) * INT_MAX;
+
+					atomicMin(&pDepthBuffer[depthIndex], depthRepresentation);
+
+					if (pDepthBuffer[depthIndex] == depthRepresentation)
+					{
+						pFragmentBuffer[depthIndex] = InterpolatePrimitiveValues(primitives[index]);
+					}
 				}
 			}
 		}
@@ -580,7 +584,7 @@ void gpuRender(uint32_t* buf)
 
 #ifdef TIMER
 	cudaEventRecord(startRasterizer);
-	Rasterize<<<blockCount2d, blockSize2d >>>(dev_primitives, g_primitiveCount, g_pFragmentBuffer, g_DepthBuffer);
+	Rasterize<<<vertexGridSize, vertexBlockSize >>>(dev_primitives, g_primitiveCount, g_pFragmentBuffer, g_DepthBuffer);
 	cudaEventRecord(stopRasterizer);
 #else
 	Rasterize << <vertexGridSize, vertexBlockSize >> > (dev_primitives, g_primitiveCount, g_pFragmentBuffer, g_DepthBuffer);
@@ -588,11 +592,13 @@ void gpuRender(uint32_t* buf)
 
 #ifdef TIMER
 	cudaEventRecord(startFragmentShading);
-	FragmentShading << <fragmentGridSize, fragmentBlockSize >> > (buf, g_pFragmentBuffer, g_pTexture, g_TextureWidth, g_TextureHeight, g_TextureChannels);
+	FragmentShading << <blocksPerGrid, threadsPerBlock >> > (buf, g_pFragmentBuffer, g_pTexture, g_TextureWidth, g_TextureHeight, g_TextureChannels);
 	cudaEventRecord(stopFragmentShading);
 #else
 	FragmentShading << <blocksPerGrid, threadsPerBlock >> > (buf, g_pFragmentBuffer, g_pTexture, g_TextureWidth, g_TextureHeight, g_TextureChannels);
 #endif // TIMER
+
+	cudaThreadSynchronize();
 
 #ifdef TIMER
 	cudaEventSynchronize(stopVertexShading);
