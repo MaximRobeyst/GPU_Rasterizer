@@ -265,7 +265,7 @@ void AssemblePrimitives(int primitiveCount, const Vertex_Out* vertexBufferOut, T
 		};
 
 		primitives[index].boundingBox.max = glm::vec3{
-			clamp(max(primitives[index].v[0].screenPosition.x, max(primitives[index].v[1].screenPosition.x, primitives[index].v[2].screenPosition.x)), 0.0f, static_cast<float>(SCREEN_WIDTH)),
+			clamp(max(primitives[index].v[0].screenPosition.x, max(primitives[index].v[1].screenPosition.x, primitives[index].v[2].screenPosition.x)), 0.0f, static_cast<float>(SCREEN_WIDTH-1)),
 			clamp(max(primitives[index].v[0].screenPosition.y, max(primitives[index].v[1].screenPosition.y, primitives[index].v[2].screenPosition.y)), 0.0f, static_cast<float>(SCREEN_HEIGHT)),
 			max(primitives[index].v[0].screenPosition.z, max(primitives[index].v[1].screenPosition.z, primitives[index].v[2].screenPosition.z))
 		};
@@ -382,6 +382,7 @@ void FragmentShading(uint32_t* buf, Fragment* pFragmentBuffer, TextureData* text
 __device__
 bool PixelInTriangle(Triangle* primitive, glm::vec2 pixel)
 {
+	if (!primitive->visible) return false;
 	float totalTriangleArea = abs(Cross(glm::vec2{ primitive->v[0].screenPosition } - glm::vec2{ primitive->v[2].screenPosition }, glm::vec2{ primitive->v[1].screenPosition } - glm::vec2{ primitive->v[2].screenPosition }));
 
 	for (int i = 0; i < 3; ++i)

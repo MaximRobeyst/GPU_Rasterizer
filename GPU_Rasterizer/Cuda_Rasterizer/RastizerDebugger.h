@@ -14,14 +14,16 @@ class Mesh;
 class RastizerDebugger
 {
 public:
-	RastizerDebugger(Camera* pCamera, std::vector<Vertex_In>& vertices, std::vector<unsigned int>& indices, Texture* pTexture);
+	RastizerDebugger(Camera* pCamera, uint32_t* surface);
+	~RastizerDebugger();
 
 	void InitBuffers(Camera* pCamera, std::vector<Vertex_In>& vertices, std::vector<unsigned int>& indices, Texture* pTexture,  const glm::mat4& worldMatrix);
-	void Render(uint32_t* screen, std::vector<Mesh*>& meshes);
-	void ClearScreen(uint32_t* screen, glm::vec3 color);
+	void Render(std::vector<Mesh*>& meshes);
+	void ClearScreen(glm::vec3 color);
+	void ClearDepthBuffer();
 private:
 	void ClearDepthBuffer(int* depthBuf);
-	void VertexShading(int index, int w, int h, float far, float near, int verteCount, const Vertex_In* verteInBuffer, Vertex_Out* verteOutBuffer, const glm::mat4 worldToView, const glm::mat4 projectionMatrix);
+	void VertexShading(int index, int w, int h, float far, float near, int verteCount, const Vertex_In* verteInBuffer, Vertex_Out* verteOutBuffer, const glm::mat4 worldToView, const glm::mat4 projectionMatrix, const glm::mat4& worldMatrix);
 	void AssamblePrimitives(int inde, int primitiveCount, const Vertex_Out* vertexBufferOut, Triangle* primitives, const unsigned int* bufIdx);
 	void Rasterize(int primId, Triangle* primitives, int primitveCount, Fragment* pFragmentBuffer, int* pDepthBuffer);
 	void FragmentShade(int x, int y, uint32_t* buf, Fragment* pFragmentBuffer, TextureData* textures, int textureWidth, int textureHeight, int channels);
@@ -30,7 +32,7 @@ private:
 	float getDepthAtPixel(Triangle primitive);
 	Fragment InterpolatePrimitiveValues(Triangle primitive);
 
-	void Render(uint32_t* screen);
+	void Render();
 
 	glm::vec3 MaxToOne(const glm::vec3 color);
 
@@ -40,11 +42,11 @@ private:
 	}
 
 
-	inline glm::vec3 TextureSample(TextureData* textures, glm::vec2 uv, int width, int height, int channels)
+	glm::vec3 TextureSample(TextureData* textures, glm::vec2 uv, int width, int height, int channels)
 	{
 		// Not bilinear
-		int u = static_cast<int>(uv.x) * width;
-		int v = static_cast<int>(uv.y) * height;
+		int u = uv.x * width;
+		int v = uv.y * height;
 
 		// https://stackoverflow.com/questions/35005603/get-color-of-the-texture-at-uv-coordinate
 		int uvIndex = channels * (u + (v * width));
@@ -65,13 +67,15 @@ private:
 
 	std::vector<Vertex_In> m_VerticesIn;
 	std::vector<Vertex_Out> m_VerticesOut;
-	std::vector<Fragment> m_Fragments;
 	std::vector<unsigned int> m_Indices;
 	std::vector<Triangle> m_Triangles;
 	
 	int* m_DepthInfo{};
-	//uint32_t* m_Buffer{};
+	uint32_t* m_Buffer{};
 	Texture* m_pTexture;
+	Fragment* m_pFragments;
+
+	glm::mat4 m_WorldMatrix{};
 
 	Camera* m_pCamera;
 };

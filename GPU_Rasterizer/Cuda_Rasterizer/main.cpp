@@ -100,33 +100,33 @@ int main(int /*argc*/, char* /*args*/[]) {
 
 	std::vector<Mesh*> pMeshes{};
 
-	std::vector<Vertex_In> triangleVertices
-	{
-		// Triangle 1
-		Vertex_In{glm::vec3{.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 0.0f, 0.0f}, glm::vec2{1,1}},
-		Vertex_In{glm::vec3{-.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 1.0f, 0.0f}, glm::vec2{0,0}},
-		Vertex_In{glm::vec3{.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 0.0f, 1.0f}, glm::vec2{1,0}},
-
-		// Triangle 2
-		Vertex_In{glm::vec3{.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 0.0f, 0.0f}, glm::vec2{1,1}},
-		Vertex_In{glm::vec3{-.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 1.0f, 0.0f}, glm::vec2{0,0}},
-		Vertex_In{glm::vec3{-.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 0.0f, 0.0f}, glm::vec2{0,1}}
-	};
-
-	std::vector<unsigned int> indices
-	{
-		0,	1,	2,
-		5, 4, 3,
-	};
-
-	pMeshes.emplace_back(new Mesh(triangleVertices, indices));
-	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{0.0f,0,0} });
+	std::vector<Vertex_In> triangleVertices{};
+		//{
+		//	// Triangle 1
+		//	Vertex_In{glm::vec3{.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 0.0f, 0.0f}, glm::vec2{1,1}},
+		//	Vertex_In{glm::vec3{-.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 1.0f, 0.0f}, glm::vec2{0,0}},
+		//	Vertex_In{glm::vec3{.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 0.0f, 1.0f}, glm::vec2{1,0}},
+		//
+		//	// Triangle 2
+		//	Vertex_In{glm::vec3{.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 0.0f, 0.0f}, glm::vec2{1,1}},
+		//	Vertex_In{glm::vec3{-.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 1.0f, 0.0f}, glm::vec2{0,0}},
+		//	Vertex_In{glm::vec3{-.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 0.0f, 0.0f}, glm::vec2{0,1}}
+		//};
+		//
+		std::vector<unsigned int> indices{};
+	//{
+	//	0,	1,	2,
+	//	5, 4, 3,
+	//};
+	//
+	//pMeshes.emplace_back(new Mesh(triangleVertices, indices));
+	//pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{0.0f,0,0} });
 
 	Elite::ParseOBJ("Resources/tuktuk.obj", triangleVertices, indices);
 	pMeshes.emplace_back(new Mesh( triangleVertices, indices ));
 	pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/tuktuk.png" });
 	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{-10.0f,0.0f,0} });
-
+	
 	Elite::ParseOBJ("Resources/vehicle.obj", triangleVertices, indices);
 	pMeshes.emplace_back(new Mesh(triangleVertices, indices));
 	pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/vehicle_diffuse.png" });
@@ -137,7 +137,7 @@ int main(int /*argc*/, char* /*args*/[]) {
 	//InitBuffers(triangleVertices, indices, textures);
 	float fpsCounter = 0.0f;
 
-	RastizerDebugger rasterizer{ pCamera, triangleVertices, indices, pMeshes[pMeshes.size() -1]->GetTextures()[0]};
+	RastizerDebugger rasterizer{ pCamera, (uint32_t*)default_screen ->pixels};
 
 	auto t1 = std::chrono::steady_clock::now();
 
@@ -166,7 +166,13 @@ int main(int /*argc*/, char* /*args*/[]) {
 				if (e.key.keysym.sym == SDLK_p)
 					paused = !paused;
 				if (e.key.keysym.sym == SDLK_r)
+				{
 					gpu = !gpu;
+					if (gpu)
+						std::cout << "GPU rendering" << std::endl;
+					else
+						std::cout << "CPU Rendering" << std::endl;
+				}
 			}
 		}
 
@@ -189,11 +195,12 @@ int main(int /*argc*/, char* /*args*/[]) {
 		if (gpu)
 		{
 			render(default_screen, gpu_Screen, pMeshes);
-			ClearScreen(gpu_Screen, glm::vec3{ 0.1f });
+			ClearScreen(gpu_Screen, glm::vec3{ 0.0f });
 		}
 		else
 		{
-			rasterizer.Render((uint32_t*)default_screen->pixels, pMeshes);
+			rasterizer.ClearDepthBuffer();
+			rasterizer.Render(pMeshes);
 			// Render gpu_Screen
 		}
 		//rasterizer.Render();
@@ -203,9 +210,6 @@ int main(int /*argc*/, char* /*args*/[]) {
 		SDL_RenderClear(sdlRenderer);
 		SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, NULL);
 		SDL_RenderPresent(sdlRenderer);
-
-		if(!gpu)
-			//rasterizer.ClearScreen((uint32_t*)default_screen->pixels, glm::vec3 { 0.1f });
 
 		if (fpsCounter >= 1.0f)
 		{

@@ -11,7 +11,11 @@
 
 Texture::Texture(const std::string& texturePath)
 {
+	m_Path = texturePath;
+
 	m_pImageData = stbi_load(texturePath.data(), &m_Width, &m_Height, &m_NrOfChannels, 0);
+	if (m_pImageData == nullptr)
+		std::cout << "Texture failed to load" << std::endl;
 }
 
 Texture::~Texture()

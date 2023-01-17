@@ -23,6 +23,8 @@ public:
 	int GetChannels() const;
 
 private:
+	std::string m_Path{};
+
 	unsigned char* m_pImageData;
 	int m_Width;
 	int m_Height;

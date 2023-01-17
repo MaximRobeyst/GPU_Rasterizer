@@ -3,34 +3,40 @@
 #include "Texture.h"
 #include "Mesh.h"
 #include "Transform.h"
+#include <iostream>
 
-RastizerDebugger::RastizerDebugger(Camera* pCamera, std::vector<Vertex_In>& vertices, std::vector<unsigned int>& indices, Texture* pTexture)
+RastizerDebugger::RastizerDebugger(Camera* pCamera, uint32_t* surface)
 	: m_pCamera{pCamera}
 {
+	m_Buffer = surface;
 	m_DepthInfo = new int[SCREEN_WIDTH * SCREEN_HEIGHT];
+	m_pFragments = new Fragment[SCREEN_SIZE];
+}
 
-	m_Fragments.resize(SCREEN_SIZE);
+RastizerDebugger::~RastizerDebugger()
+{
+	delete m_DepthInfo;
+	delete m_pFragments;
 }
 
 void RastizerDebugger::ClearDepthBuffer(int* depthBuf)
 {
-	m_Fragments.resize(SCREEN_SIZE);
 	for (int xPix = 0; xPix < SCREEN_WIDTH; ++xPix)
 	{
 		for (int yPix = 0; yPix < SCREEN_HEIGHT; ++yPix)
 		{
 			unsigned int pos = SCREEN_WIDTH * yPix + xPix;
-
+			m_pFragments[pos] = Fragment{};
 			depthBuf[pos] = INT_MAX;
 		}
 	}
 }
 
-void RastizerDebugger::VertexShading(int index, int w, int h, float, float, int verteCount, const Vertex_In* verteInBuffer, Vertex_Out* verteOutBuffer, const glm::mat4 worldToView, const glm::mat4 projectionMatrix)
+void RastizerDebugger::VertexShading(int index, int w, int h, float, float, int verteCount, const Vertex_In* verteInBuffer, Vertex_Out* verteOutBuffer, const glm::mat4 worldToView, const glm::mat4 projectionMatrix, const glm::mat4& worldMatrix)
 {
 	if (index >= verteCount) return;
 
-	glm::vec4 projectedVertex = projectionMatrix * worldToView * glm::vec4(verteInBuffer[index].position, 1.0f);
+	glm::vec4 projectedVertex = projectionMatrix * worldToView * worldMatrix * glm::vec4(verteInBuffer[index].position, 1.0f);
 
 	glm::vec3 normDeviceCoordinates = glm::vec3(projectedVertex.x, projectedVertex.y, projectedVertex.z) / projectedVertex.w;
 
@@ -90,13 +96,12 @@ void RastizerDebugger::Rasterize(int primId, Triangle* primitives, int primitveC
 				int depthIndex = yPixel * SCREEN_WIDTH + xPixel;
 
 				glm::vec3 position;
-				if (!PixelInTriangle(&primitives[index], glm::vec2{ xPixel, yPixel })) continue;
-				int depthRepresentation = getDepthAtPixel(primitives[index]) * 1000.0f;
+				if (!PixelInTriangle(&primitives[index], glm::vec2{ xPixel, yPixel } )) continue;
+				int depthRepresentation = getDepthAtPixel(primitives[index]) * INT_MAX;
 
-				pDepthBuffer[depthIndex] = std::min(pDepthBuffer[depthIndex], depthRepresentation);
-
-				if (pDepthBuffer[depthIndex] == depthRepresentation)
+				if (pDepthBuffer[depthIndex] > depthRepresentation)
 				{
+					pDepthBuffer[depthIndex] = depthRepresentation;
 					pFragmentBuffer[depthIndex] = InterpolatePrimitiveValues(primitives[index]);
 				}
 			}
@@ -133,7 +138,6 @@ void RastizerDebugger::FragmentShade(int x, int y, uint32_t* buf, Fragment* pFra
 		shadedEndColor += ambientColor;
 
 		endColor = MaxToOne(shadedEndColor);
-
 		buf[pos] = (uint8_t)(endColor.b * 255.0f) | ((uint8_t)(endColor.g * 255) << 8) | ((uint8_t)(endColor.r * 255) << 16) | (uint8_t)(255.0f) << 24;
 	}
 }
@@ -150,40 +154,44 @@ void RastizerDebugger::InitBuffers(Camera* pCamera, std::vector<Vertex_In>& vert
 	m_Triangles.resize(vertices.size() / 3);
 
 	m_pTexture = pTexture;
+
+	m_WorldMatrix = worldMatrix;
 }
 
-void RastizerDebugger::Render(uint32_t* screen, std::vector<Mesh*>& meshes)
+void RastizerDebugger::Render(std::vector<Mesh*>& meshes)
 {
 	for (int i = 0; i < meshes.size(); ++i)
 	{
 		InitBuffers(m_pCamera, meshes[i]->GetVertices(), meshes[i]->GetIndices(), meshes[i]->GetTextures().size() > 0 ? meshes[i]->GetTextures()[0] : nullptr, meshes[i]->GetTransform()->GetWorldTransform());
-		Render(screen);
+		Render();
 	}
 }
 
-void RastizerDebugger::ClearScreen(uint32_t* screen, glm::vec3 color)
+void RastizerDebugger::ClearScreen(glm::vec3 color)
 {
 	for (int x = 0; x < SCREEN_WIDTH; ++x)
 	{
 		for (int y = 0; y < SCREEN_HEIGHT; ++y)
 		{
 			unsigned int pos = SCREEN_WIDTH * y + x;
-			screen[pos] = (uint8_t)(color.b * 255.0f) | ((uint8_t)(color.g * 255) << 8) | ((uint8_t)(color.r * 255) << 16) | (uint8_t)(255.0f) << 24;
+			m_Buffer[pos] = (uint8_t)(color.b * 255.0f) | ((uint8_t)(color.g * 255) << 8) | ((uint8_t)(color.r * 255) << 16) | (uint8_t)(255.0f) << 24;
 		}
 	}
 }
 
-void RastizerDebugger::Render(uint32_t* screen)
+void RastizerDebugger::ClearDepthBuffer()
+{
+	ClearDepthBuffer(m_DepthInfo);
+}
+
+void RastizerDebugger::Render()
 {
 	int w = static_cast<int>(SCREEN_WIDTH);
 	int h = static_cast<int>(SCREEN_HEIGHT);
 
-	// Clear depth buffer
-	ClearDepthBuffer(m_DepthInfo);
-
 	// Verte shading
 	for (int i = 0; i < m_VerticesIn.size(); ++i)
-		VertexShading(i, w, h, m_pCamera->GetFar(), m_pCamera->GetNear(), m_VerticesIn.size(), m_VerticesIn.data(), m_VerticesOut.data(), m_pCamera->GetViewMatrix(), m_pCamera->GetProjectionMatrix());
+		VertexShading(i, w, h, m_pCamera->GetFar(), m_pCamera->GetNear(), m_VerticesIn.size(), m_VerticesIn.data(), m_VerticesOut.data(), m_pCamera->GetViewMatrix(), m_pCamera->GetProjectionMatrix(), m_WorldMatrix);
 
 	// Primitive Assembly
 	for(int i = 0; i < m_VerticesIn.size() / 3; ++i)
@@ -194,17 +202,18 @@ void RastizerDebugger::Render(uint32_t* screen)
 
 	// Rasterization
 	for (int i = 0; i < m_Triangles.size(); ++i)
-		Rasterize(i, m_Triangles.data(), m_Triangles.size(), m_Fragments.data(), m_DepthInfo);
+		Rasterize(i, m_Triangles.data(), m_Triangles.size(), m_pFragments, m_DepthInfo);
 
 	// Fragment shader
-	for (int x = 0; x < SCREEN_WIDTH; ++x)
+	for (int y = 0; y < SCREEN_HEIGHT; ++y)
 	{
-		for (int y = 0; y < SCREEN_HEIGHT; ++y)
+		for (int x = 0; x < SCREEN_WIDTH; ++x)
 		{
-			if (m_pTexture == nullptr)
-				FragmentShade(x, y, screen, m_Fragments.data(), nullptr, 0, 0, 0);
-			else
-				FragmentShade(x,y, screen, m_Fragments.data(), m_pTexture->GetData(), m_pTexture->GetWidth(), m_pTexture->GetHeight(), m_pTexture->GetChannels());
+			FragmentShade(x,y, m_Buffer, m_pFragments, 
+					m_pTexture == nullptr ? nullptr : m_pTexture->GetData(),
+					m_pTexture == nullptr ? 0 : m_pTexture->GetWidth(),
+					m_pTexture == nullptr ? 0 : m_pTexture->GetHeight(),
+					m_pTexture == nullptr ? 0 : m_pTexture->GetChannels());
 		}
 	}
 
