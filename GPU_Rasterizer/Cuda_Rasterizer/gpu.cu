@@ -352,6 +352,8 @@ void FragmentShading(uint32_t* buf, Fragment* pFragmentBuffer, TextureData* text
 	if (pos < SCREEN_SIZE)
 	{
 		Fragment fragment = pFragmentBuffer[pos];
+		if (fragment.screenPosition == glm::vec3{0.0f, 0.0f, 0.0f})
+			return;
 
 		glm::vec3 endColor = fragment.color;
 
@@ -376,6 +378,7 @@ void FragmentShading(uint32_t* buf, Fragment* pFragmentBuffer, TextureData* text
 		endColor = MaxToOne(shadedEndColor);
 
 		buf[pos] = (uint8_t)(endColor.b * 255.0f) | ((uint8_t)(endColor.g * 255) << 8) | ((uint8_t)(endColor.r * 255) << 16) | (uint8_t)(255.0f) << 24;
+		pFragmentBuffer[pos] = Fragment{};
 	}
 }
 

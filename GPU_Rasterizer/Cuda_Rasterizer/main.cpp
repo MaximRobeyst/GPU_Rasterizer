@@ -100,27 +100,27 @@ int main(int /*argc*/, char* /*args*/[]) {
 
 	std::vector<Mesh*> pMeshes{};
 
-	std::vector<Vertex_In> triangleVertices{};
-		//{
-		//	// Triangle 1
-		//	Vertex_In{glm::vec3{.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 0.0f, 0.0f}, glm::vec2{1,1}},
-		//	Vertex_In{glm::vec3{-.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 1.0f, 0.0f}, glm::vec2{0,0}},
-		//	Vertex_In{glm::vec3{.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 0.0f, 1.0f}, glm::vec2{1,0}},
-		//
-		//	// Triangle 2
-		//	Vertex_In{glm::vec3{.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 0.0f, 0.0f}, glm::vec2{1,1}},
-		//	Vertex_In{glm::vec3{-.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 1.0f, 0.0f}, glm::vec2{0,0}},
-		//	Vertex_In{glm::vec3{-.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 0.0f, 0.0f}, glm::vec2{0,1}}
-		//};
-		//
-		std::vector<unsigned int> indices{};
-	//{
-	//	0,	1,	2,
-	//	5, 4, 3,
-	//};
-	//
-	//pMeshes.emplace_back(new Mesh(triangleVertices, indices));
-	//pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{0.0f,0,0} });
+	std::vector<Vertex_In> triangleVertices
+	{
+		// Triangle 1
+		Vertex_In{glm::vec3{.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 0.0f, 0.0f}, glm::vec2{1,1}},
+		Vertex_In{glm::vec3{-.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 1.0f, 0.0f}, glm::vec2{0,0}},
+		Vertex_In{glm::vec3{.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 0.0f, 1.0f}, glm::vec2{1,0}},
+	
+		// Triangle 2
+		Vertex_In{glm::vec3{.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{1.0f, 0.0f, 0.0f}, glm::vec2{1,1}},
+		Vertex_In{glm::vec3{-.5f, -.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 1.0f, 0.0f}, glm::vec2{0,0}},
+		Vertex_In{glm::vec3{-.5f, 0.5f, 0.f}, glm::vec3{0,0,1}, glm::vec3{1,0,0}, glm::vec3{0.0f, 0.0f, 0.0f}, glm::vec2{0,1}}
+	};
+		
+	std::vector<unsigned int> indices
+	{
+		0,	1,	2,
+		5, 4, 3,
+	};
+	
+	pMeshes.emplace_back(new Mesh(triangleVertices, indices));
+	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{0.0f,0,0} });
 
 	Elite::ParseOBJ("Resources/tuktuk.obj", triangleVertices, indices);
 	pMeshes.emplace_back(new Mesh( triangleVertices, indices ));
