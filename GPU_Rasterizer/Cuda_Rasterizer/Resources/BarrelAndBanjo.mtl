@@ -1,0 +1,13 @@
+# Blender MTL File: 'None'
+# Material Count: 1
+
+newmtl BarrelAndBanjo_01_sh
+Ns 179.999996
+Ka 1.000000 1.000000 1.000000
+Kd 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.0 0.0 0.0
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd C:\\Users\\maxim\\OneDrive - Hogeschool West-Vlaanderen\\Howest\\SEM2_3D1\\5Props\\1GD21_RobeystMaxim_Props\\_MAIN\\sourceImages\\T_BarrelAndBanjo_BC_01.jpg

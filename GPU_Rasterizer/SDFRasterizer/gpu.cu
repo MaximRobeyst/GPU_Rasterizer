@@ -228,7 +228,7 @@ void VerteShading(int w, int h, float far, float near, int verteCount, const Ver
 			projectedVertex.w
 		};
 		verteOutBuffer[index].normal = glm::normalize(meshWorldMatrix * glm::vec4{ verteInBuffer[index].normal, 0.0f });
-		verteOutBuffer[index].tangent = glm::normalize(meshWorldMatrix * glm::vec4{ verteInBuffer[index].tangent, 0.0f });
+		//verteOutBuffer[index].tangent = glm::normalize(meshWorldMatrix * glm::vec4{ verteInBuffer[index].tangent, 0.0f });
 		verteOutBuffer[index].color = verteInBuffer[index].color;
 		verteOutBuffer[index].uv = verteInBuffer[index].uv;
 	}
@@ -308,7 +308,7 @@ glm::vec3 TextureSample(TextureData* textures, glm::vec2 uv, int width, int heig
 {
 	// Linear
 	int u = uv.x * width;
-	int v = uv.y * height;
+	int v =(1- uv.y) * height;
 
 	// https://stackoverflow.com/questions/35005603/get-color-of-the-texture-at-uv-coordinate
 	int uvIndex = channels * (u + (v * width));

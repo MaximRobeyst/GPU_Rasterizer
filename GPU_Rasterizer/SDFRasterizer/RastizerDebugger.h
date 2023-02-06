@@ -47,8 +47,8 @@ private:
 		if (glm::all(glm::isnan(uv))) return glm::vec3(1.0f, 0.0f, 1.0f);
 
 		// Not bilinear
-		int u = uv.x * width;
-		int v = uv.y * height;
+		int u =static_cast<int>(uv.x * width);
+		int v = static_cast<int>((1 -uv.y) * height);
 
 		// https://stackoverflow.com/questions/35005603/get-color-of-the-texture-at-uv-coordinate
 		int uvIndex = channels * (u + (v * width));

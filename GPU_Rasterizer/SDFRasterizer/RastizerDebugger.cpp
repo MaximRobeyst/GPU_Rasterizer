@@ -49,7 +49,7 @@ void RastizerDebugger::VertexShading(int index, int w, int h, float, float, int 
 		projectedVertex.w
 	};
 	verteOutBuffer[index].normal = verteInBuffer[index].normal;
-	verteOutBuffer[index].tangent = verteInBuffer[index].tangent;
+	//verteOutBuffer[index].tangent = verteInBuffer[index].tangent;
 	verteOutBuffer[index].color = verteInBuffer[index].color;
 	verteOutBuffer[index].uv = verteInBuffer[index].uv;
 }
@@ -99,15 +99,15 @@ void RastizerDebugger::Rasterize(int primId, Triangle* primitives, int primitveC
 		if (!primitives[index].visible) return;
 		BoundingBox aabb = primitives[index].boundingBox;
 
-		for (int xPixel = aabb.min.x; xPixel <= aabb.max.x; ++xPixel)
+		for (int xPixel = static_cast<int>(aabb.min.x); xPixel <=static_cast<int>(aabb.max.x); ++xPixel)
 		{
-			for (int yPixel = aabb.min.y; yPixel <= aabb.max.y; ++yPixel)
+			for (int yPixel = static_cast<int>(aabb.min.y); yPixel <= static_cast<int>(aabb.max.y); ++yPixel)
 			{
 				int depthIndex = yPixel * SCREEN_WIDTH + xPixel;
 
 				glm::vec3 position;
 				if (!PixelInTriangle(&primitives[index], glm::vec2{ xPixel, yPixel } )) continue;
-				int depthRepresentation = getDepthAtPixel(primitives[index]) * INT_MAX;
+				int depthRepresentation = static_cast<int>(getDepthAtPixel(primitives[index]) * INT_MAX);
 
 				if (pDepthBuffer[depthIndex] > depthRepresentation)
 				{
@@ -155,7 +155,7 @@ void RastizerDebugger::FragmentShade(int x, int y, uint32_t* buf, Fragment* pFra
 	}
 }
 
-void RastizerDebugger::InitBuffers(Camera* pCamera, std::vector<Vertex_In>& vertices, std::vector<unsigned int>& indices, Texture* pTexture, const glm::mat4& worldMatrix)
+void RastizerDebugger::InitBuffers(Camera* /*pCamera*/, std::vector<Vertex_In>& vertices, std::vector<unsigned int>& indices, Texture* pTexture, const glm::mat4& worldMatrix)
 {
 	m_VerticesIn.resize(vertices.size());
 	std::copy(vertices.begin(), vertices.end(), m_VerticesIn.begin());
@@ -205,18 +205,18 @@ void RastizerDebugger::Render()
 
 	// Verte shading
 	for (int i = 0; i < m_VerticesIn.size(); ++i)
-		VertexShading(i, w, h, m_pCamera->GetFar(), m_pCamera->GetNear(), m_VerticesIn.size(), m_VerticesIn.data(), m_VerticesOut.data(), m_pCamera->GetViewMatrix(), m_pCamera->GetProjectionMatrix(), m_WorldMatrix);
+		VertexShading(i, w, h, m_pCamera->GetFar(), m_pCamera->GetNear(), static_cast<int>(m_VerticesIn.size()), m_VerticesIn.data(), m_VerticesOut.data(), m_pCamera->GetViewMatrix(), m_pCamera->GetProjectionMatrix(), m_WorldMatrix);
 
 	// Primitive Assembly
 	for(int i = 0; i < m_VerticesIn.size() / 3; ++i)
-		AssamblePrimitives(i, m_VerticesIn.size() / 3, m_VerticesOut.data(), m_Triangles.data(), m_Indices.data());
+		AssamblePrimitives(i, static_cast<int>( m_VerticesIn.size() / 3), m_VerticesOut.data(), m_Triangles.data(), m_Indices.data());
 
 	// Culling 
 
 
 	// Rasterization
 	for (int i = 0; i < m_Triangles.size(); ++i)
-		Rasterize(i, m_Triangles.data(), m_Triangles.size(), m_pFragments, m_DepthInfo);
+		Rasterize(i, m_Triangles.data(), static_cast<int>(m_Triangles.size()), m_pFragments, m_DepthInfo);
 
 	// Fragment shader
 	for (int y = 0; y < SCREEN_HEIGHT; ++y)

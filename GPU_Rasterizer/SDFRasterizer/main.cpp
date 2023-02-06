@@ -25,11 +25,14 @@
 #pragma warning(pop)
 
 #include "RastizerDebugger.h"
-#include "EOBJParser.h"
 #include "Texture.h"
 #include "stb_image.h"
 #include "Mesh.h"
 #include "Transform.h"
+
+#include "OBJ_Loader.h"
+#include <algorithm>
+#include "SDFMesh.h"
 
 void render(SDL_Surface* screen, void* cuda_pixels, const std::vector<Mesh*>& pMeshes) 
 {
@@ -49,8 +52,8 @@ void render(SDL_Surface* screen, void* cuda_pixels, const std::vector<Mesh*>& pM
 
 int main(int /*argc*/, char* /*args*/[]) {
 
-	uint32_t time_step{ static_cast<uint32_t>(1000. / 60.) };
-	uint32_t next_time_step{ SDL_GetTicks() };
+	//uint32_t time_step{ static_cast<uint32_t>(1000. / 60.) };
+	//uint32_t next_time_step{ SDL_GetTicks() };
 
 	//stbi_set_flip_vertically_on_load(true);
 
@@ -76,7 +79,7 @@ int main(int /*argc*/, char* /*args*/[]) {
         SDL_Log("SDL_CreateRGBSurface() failed: %s", SDL_GetError());
         exit(1);
 	}
-    SDL_Renderer* sdlRenderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    SDL_Renderer* sdlRenderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 
 	SDL_Texture *sdlTexture = SDL_CreateTexture(sdlRenderer,
 												SDL_PIXELFORMAT_ARGB8888,
@@ -98,6 +101,8 @@ int main(int /*argc*/, char* /*args*/[]) {
 	//	std::cerr << "failed to alloc gpu memory" << std::endl;
 	//}
 
+	objl::Loader loader;
+
 	std::vector<Mesh*> pMeshes{};
 
 	std::vector<Vertex_In> triangleVertices{};
@@ -106,15 +111,50 @@ int main(int /*argc*/, char* /*args*/[]) {
 	//pMeshes.emplace_back(new Mesh(triangleVertices, indices));
 	//pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{0.0f,0,0} });
 
-	Elite::ParseOBJ("Resources/BarrelAndBanjo.obj", triangleVertices, indices);
-	pMeshes.emplace_back(new Mesh( triangleVertices, indices ));
-	pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/T_BarrelAndBanjo_BC_01.jpg" });
-	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{0.0f,0.0f,0} });
-	
-	//Elite::ParseOBJ("Resources/ChairAndFire.obj", triangleVertices, indices);
-	//pMeshes.emplace_back(new Mesh(triangleVertices, indices));
-	//pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/T_ChairAndFirepit_BC_01.jpg" });
-	//pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ });
+	bool success = loader.LoadFile("Resources/tuktuk.obj");
+	if (!success)
+	{
+		std::cout << "File not found" << std::endl;
+		exit(-1);
+	}
+
+	auto storeVertex = [&](objl::Vertex vertex) {
+		triangleVertices.emplace_back(
+			Vertex_In{
+				glm::vec3{ vertex.Position.X, vertex.Position.Y, vertex.Position.Z },
+				glm::vec3{vertex.Normal.X, vertex.Normal.Y, vertex.Normal.Z},
+				glm::vec3{1,1,1},
+				glm::vec2{vertex.TextureCoordinate.X, vertex.TextureCoordinate.Y}
+			});
+	};
+
+	for (int i = 0; i < loader.LoadedMeshes.size(); ++i)
+	{
+		triangleVertices.clear();
+		triangleVertices.reserve(loader.LoadedMeshes[i].Vertices.size());
+		std::for_each(loader.LoadedMeshes[i].Vertices.begin(), loader.LoadedMeshes[i].Vertices.end(), storeVertex);
+		pMeshes.emplace_back(new Mesh(triangleVertices, loader.LoadedMeshes[i].Indices));
+
+		//pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/tuktuk.jpg" });
+		pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{0.0f,0.0f,0} });
+	}
+
+	SDFMesh* pMesh = new SDFMesh(pMeshes[pMeshes.size() - 1], 128);
+
+	//Elite::ParseOBJ("Resources/BarrelAndBanjo.obj", triangleVertices, loader.LoadedIndices);
+
+
+	//success = loader.LoadFile("Resources/ChairAndFire.obj");
+	//
+	//for (int i = 0; i < loader.LoadedMeshes.size(); ++i)
+	//{
+	//	triangleVertices.clear();
+	//	std::for_each(loader.LoadedMeshes[i].Vertices.begin(), loader.LoadedMeshes[i].Vertices.end(), storeVertex);
+	//	pMeshes.emplace_back(new Mesh(triangleVertices, loader.LoadedMeshes[i].Indices));
+	//
+	//	pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/T_ChairAndFirepit_BC_01.jpg" });
+	//	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{0.0f,0.0f,0} });
+	//}
 
 	Camera* pCamera = new Camera{ glm::vec3{ 0,0,5.f }, glm::vec3{ 0,0,-1.0f }, 45.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
 
@@ -127,7 +167,7 @@ int main(int /*argc*/, char* /*args*/[]) {
 
 	float t = 0.0f;
 	bool paused = true;
-	bool gpu = true;
+	bool gpu = false;
 
 	while (1)
 	{
@@ -213,6 +253,7 @@ int main(int /*argc*/, char* /*args*/[]) {
   }
   pMeshes.clear();
 
+  delete pMesh;
   delete pCamera;
 
   	gpuFree(gpu_Screen);
