@@ -13,6 +13,8 @@ public:
 
 
 private:
+	void GenerateSDF(Mesh* pMesh, int size);
+
 	Mesh* m_pMesh;
 
 	unsigned int m_TextureSize{ 128 };

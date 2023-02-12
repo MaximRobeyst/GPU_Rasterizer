@@ -1,6 +1,3 @@
-
-#define SDL_MAIN_HANDLED
-#include <SDL.h>
 #include <stdio.h>
 #include <iostream>
 
@@ -34,14 +31,43 @@
 #include <algorithm>
 #include "SDFMesh.h"
 
-void render(SDL_Surface* screen, void* cuda_pixels, const std::vector<Mesh*>& pMeshes) 
+#include "imgui.h"
+//#include "imgui_impl_sdl.h"
+//#include "imgui_impl_sdlrenderer.h"
+
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+
+#include <io.h>
+
+#include <glad\glad.h>
+#include <GLFW\glfw3.h>
+
+void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
+{
+	ImGui_ImplGlfw_CursorPosCallback(window, xposIn, yposIn);
+}
+
+void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
+{
+	ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
+}
+
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+{
+	ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
+}
+
+void processInput(GLFWwindow* window);
+
+void render(uint32_t* screen, void* cuda_pixels, const std::vector<Mesh*>& pMeshes)
 {
 	for (int i = 0; i < pMeshes.size(); ++i)
 	{
 		InitBuffers(pMeshes[i]->GetVertexPointer(), static_cast<int>(pMeshes[i]->GetVertices().size()), pMeshes[i]->GetIndices(), pMeshes[i]->GetTextures(), pMeshes[i]->GetTransform()->GetWorldTransform());
 		gpuRender((uint32_t*)cuda_pixels);
 	}
-	if ( gpuBlit(cuda_pixels, screen->pixels) != 0 ) 
+	if ( gpuBlit(cuda_pixels, screen) != 0 ) 
 	{
 		cudaError_t err{ cudaGetLastError() };
 
@@ -50,56 +76,61 @@ void render(SDL_Surface* screen, void* cuda_pixels, const std::vector<Mesh*>& pM
 	};
 }
 
-int main(int /*argc*/, char* /*args*/[]) {
+void RenderGUI()
+{
+	static int corner = 0;
+	ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;// | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoSavedSettings;
+	if (corner != -1)
+	{
+		constexpr float PAD = 10.0f;
+		const ImGuiViewport* viewport = ImGui::GetMainViewport();
+		const ImVec2 work_pos = viewport->WorkPos; // Use work area to avoid menu-bar/task-bar, if any!
+		const ImVec2 work_size = viewport->WorkSize;
+		ImVec2 window_pos, window_pos_pivot;
+		window_pos.x = (corner & 1) ? (work_pos.x + work_size.x - PAD) : (work_pos.x + PAD);
+		window_pos.y = (corner & 2) ? (work_pos.y + work_size.y - PAD) : (work_pos.y + PAD);
+		window_pos_pivot.x = (corner & 1) ? 1.0f : 0.0f;
+		window_pos_pivot.y = (corner & 2) ? 1.0f : 0.0f;
+		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always, window_pos_pivot);
+		window_flags |= ImGuiWindowFlags_NoMove;
 
-	//uint32_t time_step{ static_cast<uint32_t>(1000. / 60.) };
-	//uint32_t next_time_step{ SDL_GetTicks() };
+		if (ImGui::Begin("SDF rasterizer"))
+		{
+			ImGui::Text("Cool imgui window");
 
-	//stbi_set_flip_vertically_on_load(true);
+			ImGui::End();
+		}
+	}
+}
 
-	if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
-		std::cerr << "could not initialize sdl2: " << SDL_GetError() << std::endl;
-		return 1;
+void LoadScene()
+{
+
+}
+
+int main(int /*argc*/, char* /*args*/[]) 
+{
+	glfwInit();
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+	GLFWwindow* window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Cubes", NULL, NULL);
+	if (window == nullptr)
+	{
+		std::cout << "Failed to create GLFW window" << std::endl;
+		glfwTerminate();
 	}
 
-	SDL_Window* window = SDL_CreateWindow(
-				"main",
-				SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-				SCREEN_WIDTH, SCREEN_HEIGHT,
-				SDL_WINDOW_SHOWN
-				);
+	glfwMakeContextCurrent(window);
+	glfwSwapInterval(1);
 
-	SDL_Surface* default_screen = SDL_CreateRGBSurface( 0, SCREEN_WIDTH, SCREEN_HEIGHT, 32,
-												0x00FF0000,
-												0x0000FF00,
-												0x000000FF,
-												0xFF000000);
-
-	if (default_screen == NULL) {
-        SDL_Log("SDL_CreateRGBSurface() failed: %s", SDL_GetError());
-        exit(1);
-	}
-    SDL_Renderer* sdlRenderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-
-	SDL_Texture *sdlTexture = SDL_CreateTexture(sdlRenderer,
-												SDL_PIXELFORMAT_ARGB8888,
-												SDL_TEXTUREACCESS_STREAMING | SDL_TEXTUREACCESS_TARGET,
-												SCREEN_WIDTH, SCREEN_HEIGHT);
-
-	if (sdlTexture== NULL) {
-        SDL_Log("SDL_Error failed: %s", SDL_GetError());
-        exit(1);
-	}
+	uint32_t* screenData = new uint32_t[SCREEN_HEIGHT * SCREEN_WIDTH];
 
 	uint32_t* gpu_Screen = gpuAllocScreenBuffer();	
 	if ( gpu_Screen == NULL ) {
 		std::cerr << "failed to alloc gpu memory" << std::endl;
 	}
-
-	//float* gpu_Depth = gpuAllocDepthBuffer();
-	//if (gpu_Depth == NULL) {
-	//	std::cerr << "failed to alloc gpu memory" << std::endl;
-	//}
 
 	objl::Loader loader;
 
@@ -107,9 +138,6 @@ int main(int /*argc*/, char* /*args*/[]) {
 
 	std::vector<Vertex_In> triangleVertices{};
 	std::vector<unsigned int> indices{};
-	
-	//pMeshes.emplace_back(new Mesh(triangleVertices, indices));
-	//pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{0.0f,0,0} });
 
 	bool success = loader.LoadFile("Resources/tuktuk.obj");
 	if (!success)
@@ -139,29 +167,13 @@ int main(int /*argc*/, char* /*args*/[]) {
 		pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{0.0f,0.0f,0} });
 	}
 
-	SDFMesh* pMesh = new SDFMesh(pMeshes[pMeshes.size() - 1], 128);
-
-	//Elite::ParseOBJ("Resources/BarrelAndBanjo.obj", triangleVertices, loader.LoadedIndices);
-
-
-	//success = loader.LoadFile("Resources/ChairAndFire.obj");
-	//
-	//for (int i = 0; i < loader.LoadedMeshes.size(); ++i)
-	//{
-	//	triangleVertices.clear();
-	//	std::for_each(loader.LoadedMeshes[i].Vertices.begin(), loader.LoadedMeshes[i].Vertices.end(), storeVertex);
-	//	pMeshes.emplace_back(new Mesh(triangleVertices, loader.LoadedMeshes[i].Indices));
-	//
-	//	pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/T_ChairAndFirepit_BC_01.jpg" });
-	//	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{0.0f,0.0f,0} });
-	//}
+	SDFMesh* pMesh = new SDFMesh(pMeshes[pMeshes.size() - 1], 16);
 
 	Camera* pCamera = new Camera{ glm::vec3{ 0,0,5.f }, glm::vec3{ 0,0,-1.0f }, 45.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
 
-	//InitBuffers(triangleVertices, indices, textures);
 	float fpsCounter = 0.0f;
 
-	RastizerDebugger rasterizer{ pCamera, (uint32_t*)default_screen ->pixels};
+	RastizerDebugger rasterizer{ pCamera, screenData};
 
 	auto t1 = std::chrono::steady_clock::now();
 
@@ -169,36 +181,38 @@ int main(int /*argc*/, char* /*args*/[]) {
 	bool paused = true;
 	bool gpu = false;
 
-	while (1)
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+
+	ImGui::StyleColorsDark();
+
+	ImGuiStyle& style = ImGui::GetStyle();
+	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+	{
+		style.WindowRounding = 0.0f;
+		style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+	}
+
+	const char* glsl_version = "#version 130";
+	ImGui_ImplGlfw_InitForOpenGL(window, true);
+	ImGui_ImplOpenGL3_Init(glsl_version);
+
+	//glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+	glfwSetCursorPosCallback(window, mouse_callback);
+	glfwSetMouseButtonCallback(window, mouse_button_callback);
+	glfwSetScrollCallback(window, scroll_callback);
+
+	while (!glfwWindowShouldClose(window))
 	{
 		auto t2 = std::chrono::steady_clock::now();
 		float elapsedSec{ std::chrono::duration<float>(t2 - t1).count() };
 		fpsCounter += elapsedSec;
 
 		t1 = t2;
-
-		SDL_Event e;
-		if (SDL_PollEvent(&e)) 
-		{
-		    if (e.type == SDL_QUIT) 
-			{
-				cudaDeviceSynchronize();
-		        break;
-		    }
-			if (e.type == SDL_KEYDOWN)
-			{
-				if (e.key.keysym.sym == SDLK_p)
-					paused = !paused;
-				if (e.key.keysym.sym == SDLK_r)
-				{
-					gpu = !gpu;
-					if (gpu)
-						std::cout << "GPU rendering" << std::endl;
-					else
-						std::cout << "CPU Rendering" << std::endl;
-				}
-			}
-		}
 
 		pCamera->Update(elapsedSec);
 		for (auto mesh : pMeshes)
@@ -212,13 +226,13 @@ int main(int /*argc*/, char* /*args*/[]) {
 
 		gpuInit(pCamera);
 
-		SDL_LockSurface(default_screen);
+		//SDL_LockSurface(default_screen);
 		ClearDepthBuffer();
 
 		// gpu
 		if (gpu)
 		{
-			render(default_screen, gpu_Screen, pMeshes);
+			render(screenData, gpu_Screen, pMeshes);
 			ClearScreen(gpu_Screen, glm::vec3{ 0.0f });
 		}
 		else
@@ -227,13 +241,22 @@ int main(int /*argc*/, char* /*args*/[]) {
 			rasterizer.Render(pMeshes);
 			// Render gpu_Screen
 		}
-		//rasterizer.Render();
-		SDL_UnlockSurface(default_screen);
 
-		SDL_UpdateTexture(sdlTexture, NULL, default_screen->pixels, default_screen->pitch);
-		SDL_RenderClear(sdlRenderer);
-		SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, NULL);
-		SDL_RenderPresent(sdlRenderer);
+		// Imgui
+		ImGui_ImplOpenGL3_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+
+		ImGui::NewFrame();
+
+		RenderGUI();
+
+		ImGui::ShowDemoWindow();
+		ImGui::Render();
+
+		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+		glDrawPixels(SCREEN_WIDTH, SCREEN_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, screenData);
+		glfwSwapBuffers(window);
 
 		if (fpsCounter >= 1.0f)
 		{
@@ -247,6 +270,11 @@ int main(int /*argc*/, char* /*args*/[]) {
     return 1;
   }
 
+  ImGui_ImplOpenGL3_Shutdown();
+  ImGui_ImplGlfw_Shutdown();
+
+  ImGui::DestroyContext();
+
   for (auto mesh : pMeshes)
   {
 	  delete mesh;
@@ -258,11 +286,11 @@ int main(int /*argc*/, char* /*args*/[]) {
 
   	gpuFree(gpu_Screen);
 
-    SDL_DestroyTexture(sdlTexture);
-    SDL_DestroyRenderer(sdlRenderer);
-    SDL_DestroyWindow(window);
+    //SDL_DestroyTexture(sdlTexture);
+    //SDL_DestroyRenderer(sdlRenderer);
+    //SDL_DestroyWindow(window);
 
-    SDL_Quit();
+    //SDL_Quit();
 
   return 0;
 }
