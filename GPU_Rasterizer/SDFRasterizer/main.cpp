@@ -32,42 +32,25 @@
 #include "SDFMesh.h"
 
 #include "imgui.h"
-//#include "imgui_impl_sdl.h"
-//#include "imgui_impl_sdlrenderer.h"
+#include "imgui_impl_sdl.h"
+#include "imgui_impl_sdlrenderer.h"
 
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
+//#include "imgui_impl_glfw.h"
+//#include "imgui_impl_opengl3.h"
 
 #include <io.h>
 
 #include <glad\glad.h>
 #include <GLFW\glfw3.h>
 
-void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
-{
-	ImGui_ImplGlfw_CursorPosCallback(window, xposIn, yposIn);
-}
-
-void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
-{
-	ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
-}
-
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
-{
-	ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
-}
-
-void processInput(GLFWwindow* window);
-
-void render(uint32_t* screen, void* cuda_pixels, const std::vector<Mesh*>& pMeshes)
+void render(SDL_Surface* screen, void* cuda_pixels, const std::vector<Mesh*>& pMeshes)
 {
 	for (int i = 0; i < pMeshes.size(); ++i)
 	{
 		InitBuffers(pMeshes[i]->GetVertexPointer(), static_cast<int>(pMeshes[i]->GetVertices().size()), pMeshes[i]->GetIndices(), pMeshes[i]->GetTextures(), pMeshes[i]->GetTransform()->GetWorldTransform());
 		gpuRender((uint32_t*)cuda_pixels);
 	}
-	if ( gpuBlit(cuda_pixels, screen) != 0 ) 
+	if ( gpuBlit(cuda_pixels, screen->pixels) != 0 ) 
 	{
 		cudaError_t err{ cudaGetLastError() };
 
@@ -110,22 +93,45 @@ void LoadScene()
 
 int main(int /*argc*/, char* /*args*/[]) 
 {
-	glfwInit();
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-	GLFWwindow* window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Cubes", NULL, NULL);
-	if (window == nullptr)
-	{
-		std::cout << "Failed to create GLFW window" << std::endl;
-		glfwTerminate();
+	if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
+		std::cerr << "could not initialize sdl2: " << SDL_GetError() << std::endl;
+		return 1;
 	}
 
-	glfwMakeContextCurrent(window);
-	glfwSwapInterval(1);
+	SDL_Window* window = SDL_CreateWindow(
+		"main",
+		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+		SCREEN_WIDTH, SCREEN_HEIGHT,
+		SDL_WINDOW_SHOWN
+	);
 
-	uint32_t* screenData = new uint32_t[SCREEN_HEIGHT * SCREEN_WIDTH];
+	if (window == NULL) {
+		std::cerr << "could not create window: " << SDL_GetError() << std::endl;
+		return 1;
+	}
+
+	SDL_Surface* default_screen = SDL_CreateRGBSurface(0, SCREEN_WIDTH, SCREEN_HEIGHT, 32,
+		0x00FF0000,
+		0x0000FF00,
+		0x000000FF,
+		0xFF000000);
+
+	if (default_screen == NULL) {
+		SDL_Log("SDL_CreateRGBSurface() failed: %s", SDL_GetError());
+		exit(1);
+	}
+	SDL_Renderer* sdlRenderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+
+	SDL_Texture* sdlTexture = SDL_CreateTexture(sdlRenderer,
+		SDL_PIXELFORMAT_ARGB8888,
+		SDL_TEXTUREACCESS_STREAMING | SDL_TEXTUREACCESS_TARGET,
+		SCREEN_WIDTH, SCREEN_HEIGHT);
+
+
+	if (sdlTexture == NULL) {
+		SDL_Log("SDL_Error failed: %s", SDL_GetError());
+		exit(1);
+	}
 
 	uint32_t* gpu_Screen = gpuAllocScreenBuffer();	
 	if ( gpu_Screen == NULL ) {
@@ -169,11 +175,11 @@ int main(int /*argc*/, char* /*args*/[])
 
 	SDFMesh* pMesh = new SDFMesh(pMeshes[pMeshes.size() - 1], 16);
 
-	Camera* pCamera = new Camera{ glm::vec3{ 0,0,5.f }, glm::vec3{ 0,0,-1.0f }, 45.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
+	Camera* pCamera = new Camera{ glm::vec3{ 0,0,75.f }, glm::vec3{ 0,0,-1.0f }, 45.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
 
 	float fpsCounter = 0.0f;
 
-	RastizerDebugger rasterizer{ pCamera, screenData};
+	RastizerDebugger rasterizer{ pCamera, (uint32_t*)default_screen->pixels};
 
 	auto t1 = std::chrono::steady_clock::now();
 
@@ -197,22 +203,39 @@ int main(int /*argc*/, char* /*args*/[])
 		style.Colors[ImGuiCol_WindowBg].w = 1.0f;
 	}
 
-	const char* glsl_version = "#version 130";
-	ImGui_ImplGlfw_InitForOpenGL(window, true);
-	ImGui_ImplOpenGL3_Init(glsl_version);
+	ImGui_ImplSDL2_InitForSDLRenderer(window, sdlRenderer);
+	ImGui_ImplSDLRenderer_Init(sdlRenderer);
 
-	//glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-	glfwSetCursorPosCallback(window, mouse_callback);
-	glfwSetMouseButtonCallback(window, mouse_button_callback);
-	glfwSetScrollCallback(window, scroll_callback);
-
-	while (!glfwWindowShouldClose(window))
+	while (1)
 	{
 		auto t2 = std::chrono::steady_clock::now();
 		float elapsedSec{ std::chrono::duration<float>(t2 - t1).count() };
 		fpsCounter += elapsedSec;
 
 		t1 = t2;
+
+		SDL_Event e;
+		if (SDL_PollEvent(&e))
+		{
+			if (e.type == SDL_QUIT)
+			{
+				cudaDeviceSynchronize();
+				break;
+			}
+			if (e.type == SDL_KEYDOWN)
+			{
+				if (e.key.keysym.sym == SDLK_p)
+					paused = !paused;
+				if (e.key.keysym.sym == SDLK_r)
+				{
+					gpu = !gpu;
+					if (gpu)
+						std::cout << "GPU rendering" << std::endl;
+					else
+						std::cout << "CPU Rendering" << std::endl;
+				}
+			}
+		}
 
 		pCamera->Update(elapsedSec);
 		for (auto mesh : pMeshes)
@@ -226,13 +249,13 @@ int main(int /*argc*/, char* /*args*/[])
 
 		gpuInit(pCamera);
 
-		//SDL_LockSurface(default_screen);
+		SDL_LockSurface(default_screen);
 		ClearDepthBuffer();
 
 		// gpu
 		if (gpu)
 		{
-			render(screenData, gpu_Screen, pMeshes);
+			render(default_screen, gpu_Screen, pMeshes);
 			ClearScreen(gpu_Screen, glm::vec3{ 0.0f });
 		}
 		else
@@ -242,9 +265,10 @@ int main(int /*argc*/, char* /*args*/[])
 			// Render gpu_Screen
 		}
 
+
 		// Imgui
-		ImGui_ImplOpenGL3_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
+		ImGui_ImplSDLRenderer_NewFrame();
+		ImGui_ImplSDL2_NewFrame(window);
 
 		ImGui::NewFrame();
 
@@ -253,10 +277,15 @@ int main(int /*argc*/, char* /*args*/[])
 		ImGui::ShowDemoWindow();
 		ImGui::Render();
 
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		ImGui_ImplSDLRenderer_RenderDrawData(ImGui::GetDrawData());
 
-		glDrawPixels(SCREEN_WIDTH, SCREEN_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, screenData);
-		glfwSwapBuffers(window);
+		// Switch buffers
+		SDL_UnlockSurface(default_screen);
+
+		SDL_UpdateTexture(sdlTexture, NULL, default_screen->pixels, default_screen->pitch);
+		SDL_RenderClear(sdlRenderer);
+		SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, NULL);
+		SDL_RenderPresent(sdlRenderer);
 
 		if (fpsCounter >= 1.0f)
 		{
@@ -265,13 +294,8 @@ int main(int /*argc*/, char* /*args*/[])
 		}
 	}
 
-  if (window == NULL) {
-	  std::cerr << "could not create window: " << SDL_GetError() << std::endl;
-    return 1;
-  }
-
-  ImGui_ImplOpenGL3_Shutdown();
-  ImGui_ImplGlfw_Shutdown();
+  ImGui_ImplSDLRenderer_Shutdown();
+  ImGui_ImplSDL2_Shutdown();
 
   ImGui::DestroyContext();
 
@@ -286,11 +310,11 @@ int main(int /*argc*/, char* /*args*/[])
 
   	gpuFree(gpu_Screen);
 
-    //SDL_DestroyTexture(sdlTexture);
-    //SDL_DestroyRenderer(sdlRenderer);
-    //SDL_DestroyWindow(window);
+    SDL_DestroyTexture(sdlTexture);
+    SDL_DestroyRenderer(sdlRenderer);
+    SDL_DestroyWindow(window);
 
-    //SDL_Quit();
+    SDL_Quit();
 
   return 0;
 }

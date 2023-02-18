@@ -185,9 +185,7 @@ int main(int /*argc*/, char* /*args*/[]) {
 		{
 			rasterizer.ClearDepthBuffer();
 			rasterizer.Render(pMeshes);
-			// Render gpu_Screen
 		}
-		//rasterizer.Render();
 		SDL_UnlockSurface(default_screen);
 
 		SDL_UpdateTexture(sdlTexture, NULL, default_screen->pixels, default_screen->pitch);
