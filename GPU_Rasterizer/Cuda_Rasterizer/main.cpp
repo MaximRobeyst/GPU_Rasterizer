@@ -93,28 +93,15 @@ int main(int /*argc*/, char* /*args*/[]) {
 		std::cerr << "failed to alloc gpu memory" << std::endl;
 	}
 
-	//float* gpu_Depth = gpuAllocDepthBuffer();
-	//if (gpu_Depth == NULL) {
-	//	std::cerr << "failed to alloc gpu memory" << std::endl;
-	//}
-
 	std::vector<Mesh*> pMeshes{};
 
 	std::vector<Vertex_In> triangleVertices{};
 	std::vector<unsigned int> indices{};
-	
-	//pMeshes.emplace_back(new Mesh(triangleVertices, indices));
-	//pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{0.0f,0,0} });
 
-	Elite::ParseOBJ("Resources/BarrelAndBanjo.obj", triangleVertices, indices);
+	Elite::ParseOBJ("Resources/tuktuk.obj", triangleVertices, indices);
 	pMeshes.emplace_back(new Mesh( triangleVertices, indices ));
-	pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/T_BarrelAndBanjo_BC_01.jpg" });
-	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{0.0f,0.0f,0} });
-	
-	//Elite::ParseOBJ("Resources/ChairAndFire.obj", triangleVertices, indices);
-	//pMeshes.emplace_back(new Mesh(triangleVertices, indices));
-	//pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/T_ChairAndFirepit_BC_01.jpg" });
-	//pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ });
+	pMeshes[pMeshes.size() - 1]->AddTexture(new Texture{ "Resources/tuktuk.jpg" });
+	pMeshes[pMeshes.size() - 1]->SetTransform(new Transform{ glm::vec3{0.0f,-5.0f,-40.0f} });
 
 	Camera* pCamera = new Camera{ glm::vec3{ 0,0,5.f }, glm::vec3{ 0,0,-1.0f }, 45.0f, static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT) };
 
